@@ -1,6 +1,40 @@
 import { describe, expect, it } from 'vitest'
 import { parseRoutineText } from './parseRoutineText'
-import { extractSets } from './types'
+import { cleanExerciseName, extractSets } from './types'
+
+describe('cleanExerciseName', () => {
+  it('rescues the lines that created junk library entries', () => {
+    // These three are verbatim from a real paste that permanently added
+    // exercises named after the raw text and split existing history in two.
+    expect(cleanExerciseName('chest row   x6 @')).toBe('chest row')
+    expect(cleanExerciseName('facepull    x15 @')).toBe('facepull')
+    expect(cleanExerciseName('Squat 100kg x 5')).toBe('Squat 100kg')
+  })
+
+  it('collapses internal whitespace', () => {
+    expect(cleanExerciseName('Barbell   Back    Squat')).toBe('Barbell Back Squat')
+  })
+
+  it('strips trailing separators', () => {
+    expect(cleanExerciseName('Deadlift -')).toBe('Deadlift')
+    expect(cleanExerciseName('Bench Press:')).toBe('Bench Press')
+    expect(cleanExerciseName('Row ...')).toBe('Row')
+  })
+
+  it('leaves legitimate names alone', () => {
+    for (const name of [
+      'T-Bar Row',
+      "Farmer's Walk",
+      'Squat (paused)',
+      'Barbell Back Squat',
+      'Face Pull',
+      'Knebøy',
+      'Deadlift 1', // a variant number is not a scheme fragment
+    ]) {
+      expect(cleanExerciseName(name)).toBe(name)
+    }
+  })
+})
 
 describe('extractSets', () => {
   it('reads NxM after the movement name', () => {
@@ -54,6 +88,8 @@ describe('parseRoutineText', () => {
       exercise: 'Barbell Back Squat',
       plannedSets: 5,
       note: '5x3+',
+      recognised: true,
+      rawSets: 5,
     })
     expect(routine.days[1]!.items[0]!.exercise).toBe('Deadlift')
   })
@@ -125,6 +161,26 @@ Pull:
 - [ ] Squat 5x5
 - [x] Bench Press 3x8`)
     expect(routine.days[0]!.items.map((i) => i.exercise)).toEqual(['Squat', 'Bench Press'])
+  })
+
+  it('marks lines with no recognisable scheme as unrecognised', () => {
+    const routine = parseRoutineText(`## Day A
+- chest row   x6 @
+- Bench Press 3x8`)
+    expect(routine.days[0]!.items[0]).toMatchObject({
+      exercise: 'chest row',
+      recognised: false,
+    })
+    expect(routine.days[0]!.items[1]).toMatchObject({
+      exercise: 'Bench Press',
+      recognised: true,
+    })
+  })
+
+  it('keeps the raw set count so absurd values can be warned about', () => {
+    const item = parseRoutineText('- Squat 40x5').days[0]!.items[0]!
+    expect(item.rawSets).toBe(40)
+    expect(item.plannedSets).toBe(30) // still clamped for storage
   })
 
   it('defaults to three sets when none is given', () => {

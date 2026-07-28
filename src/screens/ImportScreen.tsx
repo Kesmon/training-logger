@@ -50,6 +50,8 @@ export function ImportScreen() {
   const [parsed, setParsed] = useState<ParsedRoutine | null>(null)
   const [resolutions, setResolutions] = useState<NameResolution[]>([])
   const [decisions, setDecisions] = useState<Map<string, Decision>>(new Map())
+  /** Corrected names being typed for unreadable lines, keyed by the raw name. */
+  const [nameDrafts, setNameDrafts] = useState<Map<string, string>>(new Map())
   const [name, setName] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -71,10 +73,23 @@ export function ImportScreen() {
     try {
       const result =
         chosen === 'csv' ? parseRoutineCsv(text, fallback) : parseRoutineText(text, fallback)
+      const resolved = await resolveNames(result)
       setParsed(result)
       setName(result.name)
-      setResolutions(await resolveNames(result))
-      setDecisions(new Map())
+      setResolutions(resolved)
+
+      // Lines the parser could not read start out skipped. Creating an exercise
+      // from a guess is the failure this whole screen exists to prevent, so the
+      // safe option has to be the one that happens if nothing is touched.
+      const initial = new Map<string, Decision>()
+      const drafts = new Map<string, string>()
+      for (const r of resolved) {
+        if (!r.unreadable) continue
+        initial.set(r.name, { action: 'skip' })
+        drafts.set(r.name, r.name)
+      }
+      setDecisions(initial)
+      setNameDrafts(drafts)
     } catch (e) {
       setParsed(null)
       setError(e instanceof Error ? e.message : 'Could not read that file.')
@@ -103,8 +118,16 @@ export function ImportScreen() {
     setDecisions((prev) => new Map(prev).set(exerciseName, decision))
   }
 
-  const unmatched = resolutions.filter((r) => !r.existing)
+  const unreadable = resolutions.filter((r) => r.unreadable)
+  const unmatched = resolutions.filter((r) => !r.existing && !r.unreadable)
   const totalItems = parsed?.days.reduce((n, d) => n + d.items.length, 0) ?? 0
+
+  // Anything much above 8 is far more likely to be a weight than a set count.
+  const implausible = (parsed?.days ?? [])
+    .flatMap((d) => d.items)
+    .filter((i) => i.rawSets !== undefined && i.rawSets > 8)
+
+  const skipCount = [...decisions.values()].filter((d) => d.action === 'skip').length
 
   if (parsed) {
     return (
@@ -125,6 +148,117 @@ export function ImportScreen() {
             </div>
           )}
 
+          {implausible.length > 0 && (
+            <div className="card small callout callout--warn">
+              {implausible.map((i, n) => (
+                <div key={`${i.exercise}-${n}`} style={{ marginBottom: 4 }}>
+                  <strong>
+                    {i.exercise}: {i.rawSets} sets
+                  </strong>{' '}
+                  — did you mean {i.rawSets} kg? The first number is the set count. Importing this
+                  lays out {i.plannedSets} rows.
+                </div>
+              ))}
+            </div>
+          )}
+
+          {unreadable.length > 0 && (
+            <div>
+              <div className="section-title" style={{ color: 'var(--warn)' }}>
+                Couldn’t read {unreadable.length} line{unreadable.length === 1 ? '' : 's'}
+              </div>
+              <p className="tiny faint" style={{ marginBottom: 8 }}>
+                No set count was recognised and nothing in your library matches. These are
+                <strong> skipped</strong> unless you correct them — the app won’t invent an
+                exercise from a line it didn’t understand.
+              </p>
+              <div className="stack">
+                {unreadable.map((r) => {
+                  const decision = decisions.get(r.name)
+                  const adding = decision?.action === 'rename'
+                  const draft = nameDrafts.get(r.name) ?? r.name
+                  return (
+                    <div className="card" key={r.name}>
+                      <code className="tiny" style={{ color: 'var(--warn)', wordBreak: 'break-all' }}>
+                        {r.name}
+                      </code>
+                      <div className="tiny faint" style={{ margin: '2px 0 8px' }}>
+                        used {r.uses} time{r.uses === 1 ? '' : 's'}
+                      </div>
+
+                      <input
+                        value={draft}
+                        placeholder="Correct name"
+                        autoCapitalize="words"
+                        autoCorrect="off"
+                        onChange={(e) => {
+                          const value = e.target.value
+                          setNameDrafts((prev) => new Map(prev).set(r.name, value))
+                          if (adding) {
+                            decide(r.name, {
+                              action: 'rename',
+                              name: value,
+                              equipment:
+                                decision?.action === 'rename' ? decision.equipment : 'barbell',
+                            })
+                          }
+                        }}
+                      />
+
+                      <div className="row" style={{ marginTop: 8, gap: 8 }}>
+                        <button
+                          className={`btn btn--sm${!adding ? ' btn--primary' : ''}`}
+                          onClick={() => decide(r.name, { action: 'skip' })}
+                        >
+                          Skip
+                        </button>
+                        <button
+                          className={`btn btn--sm${adding ? ' btn--primary' : ''}`}
+                          onClick={() =>
+                            decide(r.name, {
+                              action: 'rename',
+                              name: draft,
+                              equipment: 'barbell',
+                            })
+                          }
+                        >
+                          Add as “{draft.trim() || '…'}”
+                        </button>
+                      </div>
+
+                      {adding && (
+                        <>
+                          <div className="fieldlabel" style={{ marginTop: 10 }}>
+                            Equipment
+                          </div>
+                          <div className="chips">
+                            {EQUIPMENT.map((eq) => (
+                              <button
+                                key={eq}
+                                className={`chip chip--sm${
+                                  decision.equipment === eq ? ' chip--on' : ''
+                                }`}
+                                onClick={() =>
+                                  decide(r.name, {
+                                    action: 'rename',
+                                    name: draft,
+                                    equipment: eq,
+                                  })
+                                }
+                              >
+                                {equipmentLabel(eq)}
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
           <div>
             <div className="section-title">
               {parsed.days.length} day{parsed.days.length === 1 ? '' : 's'} · {totalItems} exercises
@@ -138,8 +272,32 @@ export function ImportScreen() {
                       <span className="faint num" style={{ width: 18 }}>
                         {j + 1}
                       </span>
-                      <span style={{ flex: 1 }}>{item.exercise}</span>
-                      <span className="faint num">{item.plannedSets}×</span>
+                      <span
+                        style={{
+                          flex: 1,
+                          color: decisions.get(item.exercise)?.action === 'skip'
+                            ? 'var(--text-faint)'
+                            : undefined,
+                          textDecoration:
+                            decisions.get(item.exercise)?.action === 'skip'
+                              ? 'line-through'
+                              : undefined,
+                        }}
+                      >
+                        {item.exercise}
+                      </span>
+                      <span
+                        className="num"
+                        style={{
+                          color:
+                            item.rawSets !== undefined && item.rawSets > 8
+                              ? 'var(--warn)'
+                              : 'var(--text-faint)',
+                          fontWeight: item.rawSets !== undefined && item.rawSets > 8 ? 700 : 400,
+                        }}
+                      >
+                        {item.plannedSets}×
+                      </span>
                       {item.note && (
                         <span className="tiny faint" style={{ maxWidth: '38%', textAlign: 'right' }}>
                           {item.note}
@@ -224,11 +382,11 @@ export function ImportScreen() {
             </div>
           )}
 
-          {resolutions.length > unmatched.length && (
+          {resolutions.some((r) => r.existing) && (
             <p className="small faint">
-              {resolutions.length - unmatched.length} exercise
-              {resolutions.length - unmatched.length === 1 ? '' : 's'} already in your library will
-              be reused.
+              {resolutions.filter((r) => r.existing).length} exercise
+              {resolutions.filter((r) => r.existing).length === 1 ? '' : 's'} already in your
+              library will be reused.
             </p>
           )}
 
@@ -239,7 +397,11 @@ export function ImportScreen() {
             disabled={busy}
             onClick={() => void commit()}
           >
-            {busy ? 'Importing…' : 'Import routine'}
+            {busy
+              ? 'Importing…'
+              : skipCount > 0
+                ? `Import routine, skipping ${skipCount}`
+                : 'Import routine'}
           </button>
         </div>
       </Screen>

@@ -10,6 +10,7 @@ const COLUMNS = [
   'exercise',
   'set_number',
   'set_type',
+  'set_status',
   'weight_kg',
   'reps',
   'effort_type',
@@ -54,9 +55,15 @@ export function bundleToCsv(
   const { delimiter, decimal } = csvStyle(flavor)
   const sessions = new Map(bundle.sessions.map((s) => [s.id, s]))
 
-  // Only ticked sets are logged training. An unfinished session still holds its
-  // blank planned rows, and those would export as empty noise.
-  const entries = bundle.setEntries.filter((s) => s.isComplete)
+  const finished = new Set(bundle.sessions.filter((s) => s.isComplete).map((s) => s.id))
+
+  // From a finished session, every row is meaningful: a set that was planned
+  // and not done is exactly the fact a coach cannot otherwise recover. From a
+  // session still in progress only completed sets are exported, since its
+  // untouched rows are simply work not yet reached.
+  const entries = bundle.setEntries.filter(
+    (s) => s.isComplete || finished.has(s.sessionId),
+  )
 
   const num = (n: number | undefined, dp = 2): string => {
     if (n === undefined || n === null || !Number.isFinite(n)) return ''
@@ -87,8 +94,14 @@ export function bundleToCsv(
 
   for (const set of ordered) {
     const session = sessions.get(set.sessionId)
-    const volume = volumeLoad(set)
-    const e1rm = estimate1rmFromSet(set, formula)
+    const performed = set.status === 'completed'
+
+    // A row that was never performed carries no performance data, even though
+    // the app may have pre-filled it: new sets are seeded from the previous
+    // one, so an untouched row can hold a weight and rep count that were never
+    // lifted. Exporting those would invent training that did not happen.
+    const volume = performed ? volumeLoad(set) : 0
+    const e1rm = performed ? estimate1rmFromSet(set, formula) : undefined
 
     const row = [
       set.date,
@@ -98,17 +111,18 @@ export function bundleToCsv(
       set.exerciseName,
       String(set.setNumber),
       set.setType,
-      num(set.weightKg),
-      num(set.reps, 0),
-      set.effortType ?? '',
-      num(set.effortValue, 1),
-      set.tempo ?? '',
-      num(set.timeSec, 0),
-      num(set.distanceM),
+      set.status === 'planned' ? 'not_logged' : set.status,
+      performed ? num(set.weightKg) : '',
+      performed ? num(set.reps, 0) : '',
+      performed && set.effortValue !== undefined ? (set.effortType ?? '') : '',
+      performed ? num(set.effortValue, 1) : '',
+      performed ? (set.tempo ?? '') : '',
+      performed ? num(set.timeSec, 0) : '',
+      performed ? num(set.distanceM) : '',
       volume > 0 ? num(volume) : '',
       num(e1rm, 1),
       num(rests.get(set.id), 0),
-      set.loggedAt ?? '',
+      performed ? (set.loggedAt ?? '') : '',
       num(session?.sessionRpe, 1),
       num(session?.bodyweightKg),
       set.notes ?? '',

@@ -4,6 +4,7 @@ import { Screen } from '../components/Screen'
 import { Sheet } from '../components/Sheet'
 import { UTF8_BOM, bundleToCsv } from '../core/export/toCsv'
 import { BundleError, bundleToJson, buildBundle, parseBundle, restoreBundle } from '../core/export/toJson'
+import { findLibraryIssues } from '../core/library/duplicates'
 import { deliverFile, pickTextFile, todayStamp } from '../platform/share'
 import { useSettings } from '../hooks/useSettings'
 import { saveSettings } from '../db/queries'
@@ -19,14 +20,16 @@ export function SettingsScreen() {
   const [error, setError] = useState<string | null>(null)
   const [pendingWipe, setPendingWipe] = useState(false)
 
-  const counts = useLiveQuery(
-    async () => ({
+  const counts = useLiveQuery(async () => {
+    const exercises = await db.exercises.toArray()
+    const issues = findLibraryIssues(exercises)
+    return {
       sessions: await db.sessions.where('isComplete').equals(1).count(),
       sets: await db.setEntries.count(),
-      exercises: await db.exercises.count(),
-    }),
-    [],
-  )
+      exercises: exercises.length,
+      libraryIssues: issues.merges.length + issues.renames.length,
+    }
+  }, [])
 
   async function exportJson() {
     setBusy('json')
@@ -245,6 +248,23 @@ export function SettingsScreen() {
               </Row>
 
               <div className="divider" />
+
+              <button
+                className="btn btn--block"
+                disabled={busy !== null}
+                onClick={() => navigate('/library/cleanup')}
+              >
+                Clean up exercise library
+                {!!counts?.libraryIssues && (
+                  <span className="badge" style={{ background: 'var(--warn)', color: '#fff' }}>
+                    {counts.libraryIssues}
+                  </span>
+                )}
+              </button>
+              <p className="tiny faint">
+                Merges duplicate or malformed exercise names and moves their logged sets onto the
+                entry you keep.
+              </p>
 
               <button
                 className="btn btn--block"

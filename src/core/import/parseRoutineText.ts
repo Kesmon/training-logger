@@ -89,7 +89,13 @@ export function parseRoutineText(text: string, fallbackName = 'Imported routine'
 
     const { name, sets, note } = extractSets(content)
     if (!name) continue
-    current!.items.push({ exercise: name, plannedSets: clampSets(sets), note })
+    current!.items.push({
+      exercise: name,
+      plannedSets: clampSets(sets),
+      note,
+      recognised: sets !== undefined,
+      rawSets: sets,
+    })
   }
 
   const withItems = days.filter((d) => d.items.length > 0)

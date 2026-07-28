@@ -8,6 +8,7 @@ import { ExerciseDetail } from './screens/ExerciseDetail'
 import { History } from './screens/History'
 import { ImportScreen } from './screens/ImportScreen'
 import { Library } from './screens/Library'
+import { LibraryCleanup } from './screens/LibraryCleanup'
 import { RoutineDetail } from './screens/RoutineDetail'
 import { SessionDetail } from './screens/SessionDetail'
 import { SessionScreen } from './screens/SessionScreen'
@@ -35,6 +36,7 @@ const ROUTES: Route[] = [
   { pattern: '/progress', render: () => <Progress /> },
   { pattern: '/progress/:id', render: (p) => <Progress exerciseId={p.id!} /> },
   { pattern: '/library', render: () => <Library /> },
+  { pattern: '/library/cleanup', render: () => <LibraryCleanup /> },
   { pattern: '/exercise/:id', render: (p) => <ExerciseDetail id={p.id!} /> },
   { pattern: '/routine/:id', render: (p) => <RoutineDetail id={p.id!} /> },
   { pattern: '/import', render: () => <ImportScreen /> },

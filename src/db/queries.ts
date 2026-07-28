@@ -7,6 +7,7 @@ import {
   type LogField,
   type Session,
   type SetEntry,
+  type SetStatus,
   type Settings,
 } from './schema'
 
@@ -149,13 +150,10 @@ export async function updateSession(id: string, patch: Partial<Session>): Promis
 
 export async function finishSession(id: string): Promise<void> {
   await db.transaction('rw', db.sessions, db.setEntries, db.settings, async () => {
-    // Sets that were added but never filled in would otherwise pollute exports.
-    const empty = await db.setEntries
-      .where('sessionId')
-      .equals(id)
-      .filter((s) => !s.isComplete)
-      .toArray()
-    await db.setEntries.bulkDelete(empty.map((s) => s.id))
+    // Untouched sets are deliberately KEPT. Deleting them used to destroy the
+    // only evidence that something was planned and not done, which made a
+    // skipped set indistinguishable from an unlogged one for anyone reading the
+    // export. They stay as `planned` and export as `not_logged`.
     await db.sessions.update(id, { isComplete: 1, endedAt: nowIso() })
 
     const current = await getSettings()
@@ -238,6 +236,7 @@ export async function addSet(
     order,
     setNumber: (previous?.setNumber ?? 0) + 1,
     setType: 'working',
+    status: 'planned',
     isComplete: 0,
     ...seed,
     ...overrides,
@@ -250,12 +249,16 @@ export async function updateSet(id: string, patch: Partial<SetEntry>): Promise<v
   await db.setEntries.update(id, patch)
 }
 
-/** Marks a set done and stamps the time — which is what makes rest intervals
- *  derivable at export without ever building a timer. */
-export async function completeSet(id: string, complete: boolean): Promise<void> {
+/**
+ * The single write path for a set's status, keeping `isComplete` in step.
+ * Completing stamps the time, which is what makes the logging interval
+ * derivable at export without ever building a timer.
+ */
+export async function setSetStatus(id: string, status: SetStatus): Promise<void> {
   await db.setEntries.update(id, {
-    isComplete: complete ? 1 : 0,
-    loggedAt: complete ? nowIso() : undefined,
+    status,
+    isComplete: status === 'completed' ? 1 : 0,
+    loggedAt: status === 'completed' ? nowIso() : undefined,
   })
 }
 
@@ -272,6 +275,44 @@ export async function deleteSet(id: string): Promise<void> {
       .toArray()
     rest.sort((a, b) => a.setNumber - b.setNumber)
     await Promise.all(rest.map((s, i) => db.setEntries.update(s.id, { setNumber: i + 1 })))
+  })
+}
+
+/**
+ * Folds one exercise into another, moving every logged set across and keeping
+ * the old name as an alias so a future import of the same file matches the
+ * survivor instead of recreating the duplicate.
+ *
+ * This is the only operation in the app that rewrites history, which is why it
+ * is offered as a reviewed flow rather than run automatically on upgrade.
+ */
+export async function mergeExercises(fromId: string, intoId: string): Promise<number> {
+  if (fromId === intoId) return 0
+
+  return db.transaction('rw', [db.exercises, db.setEntries, db.routineItems], async () => {
+    const from = await db.exercises.get(fromId)
+    const into = await db.exercises.get(intoId)
+    if (!from || !into) throw new Error('Both exercises must exist to merge them.')
+
+    const sets = await db.setEntries.where('exerciseId').equals(fromId).toArray()
+    await Promise.all(
+      sets.map((s) =>
+        db.setEntries.update(s.id, { exerciseId: intoId, exerciseName: into.name }),
+      ),
+    )
+
+    // Routine slots pointing at the loser have to follow, or the next session
+    // started from that routine would resurrect the duplicate. Scanned rather
+    // than indexed — exerciseId is not an index here and the table is tiny.
+    const items = (await db.routineItems.toArray()).filter((i) => i.exerciseId === fromId)
+    await Promise.all(items.map((i) => db.routineItems.update(i.id, { exerciseId: intoId })))
+
+    const aliases = new Set([...into.aliases, from.nameLower, ...from.aliases])
+    aliases.delete(into.nameLower)
+    await db.exercises.update(intoId, { aliases: [...aliases] })
+    await db.exercises.delete(fromId)
+
+    return sets.length
   })
 }
 

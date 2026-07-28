@@ -9,7 +9,7 @@ import {
   weightLabel,
 } from '../core/format'
 import type { PrFlags } from '../core/metrics'
-import type { Exercise, SetEntry, SetType, Settings } from '../db/schema'
+import type { Exercise, SetEntry, SetStatus, SetType, Settings } from '../db/schema'
 import { IconCheck, IconTrash } from './Icons'
 import { NumberField } from './NumberField'
 
@@ -22,7 +22,7 @@ export function SetRow({
   settings,
   prs,
   onChange,
-  onToggleComplete,
+  onStatus,
   onDelete,
 }: {
   set: SetEntry
@@ -31,7 +31,7 @@ export function SetRow({
   /** Records this set broke, computed once per session by the parent. */
   prs?: PrFlags
   onChange: (patch: Partial<SetEntry>) => void
-  onToggleComplete: () => void
+  onStatus: (status: SetStatus) => void
   onDelete: () => void
 }) {
   const [open, setOpen] = useState(false)
@@ -52,8 +52,14 @@ export function SetRow({
   const effortType = set.effortType ?? exercise.defaultEffortType ?? settings.defaultEffortType
   const tag = setTypeShort(set.setType)
 
+  const skipped = set.status === 'skipped'
+
   return (
-    <div className={`setrow${set.isComplete ? ' setrow--done' : ''}`}>
+    <div
+      className={`setrow${set.isComplete ? ' setrow--done' : ''}${
+        skipped ? ' setrow--skipped' : ''
+      }`}
+    >
       <div className="setrow__main">
         <button
           className={`setrow__n${tag ? ' setrow__n--tagged' : ''}`}
@@ -115,7 +121,7 @@ export function SetRow({
 
         <button
           className={`setrow__check${set.isComplete ? ' setrow__check--on' : ''}`}
-          onClick={onToggleComplete}
+          onClick={() => onStatus(set.isComplete ? 'planned' : 'completed')}
           aria-label={set.isComplete ? 'Mark set incomplete' : 'Mark set complete'}
           aria-pressed={!!set.isComplete}
         >
@@ -245,9 +251,20 @@ export function SetRow({
             />
           </div>
 
-          <button className="btn btn--sm btn--danger" onClick={onDelete} style={{ alignSelf: 'flex-start' }}>
-            <IconTrash /> Delete set
-          </button>
+          <div className="row" style={{ gap: 8 }}>
+            {/* Skipping is recorded, not inferred: an untouched row at the end
+                of a session means "never got to it", which is a different fact
+                from "decided not to do it". */}
+            <button
+              className={`btn btn--sm${skipped ? ' btn--primary' : ''}`}
+              onClick={() => onStatus(skipped ? 'planned' : 'skipped')}
+            >
+              {skipped ? 'Skipped' : 'Skip set'}
+            </button>
+            <button className="btn btn--sm btn--danger" onClick={onDelete}>
+              <IconTrash /> Delete
+            </button>
+          </div>
         </div>
       )}
     </div>

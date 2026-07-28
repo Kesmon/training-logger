@@ -54,8 +54,8 @@ describe('parseRoutineCsv', () => {
     expect(routine.name).toBe('GZCLP')
     expect(routine.days.map((d) => d.name)).toEqual(['Day A', 'Day B'])
     expect(routine.days[0]!.items).toEqual([
-      { exercise: 'Barbell Back Squat', plannedSets: 5, note: '5x3+ T1' },
-      { exercise: 'Bench Press', plannedSets: 3, note: '3x10 T2' },
+      { exercise: 'Barbell Back Squat', plannedSets: 5, note: '5x3+ T1', recognised: true, rawSets: 5 },
+      { exercise: 'Bench Press', plannedSets: 3, note: '3x10 T2', recognised: true, rawSets: 3 },
     ])
     expect(routine.days[1]!.items[0]).toMatchObject({ exercise: 'Deadlift', plannedSets: 5 })
   })
@@ -89,8 +89,8 @@ describe('parseRoutineCsv', () => {
     expect(routine.days[0]!.name).toBe('Day 1')
     // Unspecified set counts fall back to 3.
     expect(routine.days[0]!.items).toEqual([
-      { exercise: 'Squat', plannedSets: 3, note: undefined },
-      { exercise: 'Bench Press', plannedSets: 3, note: undefined },
+      { exercise: 'Squat', plannedSets: 3, note: undefined, recognised: false, rawSets: undefined },
+      { exercise: 'Bench Press', plannedSets: 3, note: undefined, recognised: false, rawSets: undefined },
     ])
   })
 
@@ -109,8 +109,8 @@ describe('parseRoutineCsv', () => {
   it('pulls the set count out of an exercise cell that carries the scheme', () => {
     const routine = parseRoutineCsv('exercise\nSquat 5x5\nBench 3x10')
     expect(routine.days[0]!.items).toEqual([
-      { exercise: 'Squat', plannedSets: 5, note: '5x5' },
-      { exercise: 'Bench', plannedSets: 3, note: '3x10' },
+      { exercise: 'Squat', plannedSets: 5, note: '5x5', recognised: true, rawSets: 5 },
+      { exercise: 'Bench', plannedSets: 3, note: '3x10', recognised: true, rawSets: 3 },
     ])
   })
 
@@ -122,8 +122,8 @@ describe('parseRoutineCsv', () => {
   it('treats a file with no recognisable header as headerless', () => {
     const routine = parseRoutineCsv('Squat,5\nBench,3')
     expect(routine.days[0]!.items).toEqual([
-      { exercise: 'Squat', plannedSets: 5, note: undefined },
-      { exercise: 'Bench', plannedSets: 3, note: undefined },
+      { exercise: 'Squat', plannedSets: 5, note: undefined, recognised: true, rawSets: 5 },
+      { exercise: 'Bench', plannedSets: 3, note: undefined, recognised: true, rawSets: 3 },
     ])
     expect(routine.warnings.some((w) => w.includes('No header row'))).toBe(true)
   })

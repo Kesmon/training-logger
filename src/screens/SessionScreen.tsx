@@ -16,7 +16,7 @@ import { lastTimeSets, runningPrs, sessionVolume, type PrFlags } from '../core/m
 import { useSettings } from '../hooks/useSettings'
 import {
   addSet,
-  completeSet,
+  setSetStatus,
   deleteSet,
   finishSession,
   getExerciseHistory,
@@ -82,6 +82,8 @@ export function SessionScreen({ id }: { id: string }) {
     .sort((a, b) => (a.sets[0]?.order ?? 0) - (b.sets[0]?.order ?? 0))
 
   const done = sets.filter((s) => s.isComplete)
+  const skipped = sets.filter((s) => s.status === 'skipped')
+  const untouched = sets.filter((s) => s.status === 'planned')
   const volume = sessionVolume(sets)
   const elapsed = (Date.now() - new Date(session.startedAt).getTime()) / 1000
 
@@ -167,7 +169,7 @@ export function SessionScreen({ id }: { id: string }) {
                       settings={settings}
                       prs={prs.get(s.id)}
                       onChange={(patch) => void updateSet(s.id, patch)}
-                      onToggleComplete={() => void completeSet(s.id, !s.isComplete)}
+                      onStatus={(status) => void setSetStatus(s.id, status)}
                       onDelete={() => void deleteSet(s.id)}
                     />
                   ))}
@@ -220,10 +222,16 @@ export function SessionScreen({ id }: { id: string }) {
                 <div className="stat__k">Duration</div>
               </div>
             </div>
-            {sets.length > done.length && (
+            {skipped.length > 0 && (
               <p className="small muted">
-                {sets.length - done.length} unticked set
-                {sets.length - done.length === 1 ? '' : 's'} will be discarded.
+                {skipped.length} set{skipped.length === 1 ? '' : 's'} marked skipped.
+              </p>
+            )}
+            {untouched.length > 0 && (
+              <p className="small muted">
+                {untouched.length} set{untouched.length === 1 ? '' : 's'} never logged. These are
+                kept and recorded as not logged — use <strong>Skip set</strong> on a row if you
+                decided against it, which is a different thing.
               </p>
             )}
             <button className="btn btn--primary btn--lg btn--block" onClick={() => void onFinish()}>

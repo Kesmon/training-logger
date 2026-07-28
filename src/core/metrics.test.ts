@@ -23,6 +23,7 @@ function makeSet(over: Partial<SetEntry> = {}): SetEntry {
     order: 0,
     setNumber: counter,
     setType: 'working' as SetType,
+    status: 'completed',
     isComplete: 1,
     ...over,
   }

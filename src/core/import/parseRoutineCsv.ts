@@ -1,4 +1,10 @@
-import { clampSets, extractSets, type ParsedDay, type ParsedRoutine } from './types'
+import {
+  cleanExerciseName,
+  clampSets,
+  extractSets,
+  type ParsedDay,
+  type ParsedRoutine,
+} from './types'
 
 /**
  * Real spreadsheet exports are not clean, so this parser is deliberately
@@ -181,11 +187,17 @@ export function parseRoutineCsv(text: string, fallbackName = 'Imported routine')
     const fromColumn = setsCell ? Number(setsCell.replace(',', '.')) : NaN
     const fromNote = noteCell ? extractSets(noteCell).sets : undefined
 
+    const explicit = Number.isFinite(fromColumn)
+    const resolved = explicit ? fromColumn : (inline.sets ?? fromNote)
+
     const entry = days.get(dayName)!
     entry.day.items.push({
-      exercise: inline.name || exerciseCell,
-      plannedSets: clampSets(Number.isFinite(fromColumn) ? fromColumn : (inline.sets ?? fromNote)),
+      exercise: inline.name || cleanExerciseName(exerciseCell),
+      plannedSets: clampSets(resolved),
       note: noteCell || inline.note || undefined,
+      // A dedicated sets column counts as recognised even with no inline scheme.
+      recognised: resolved !== undefined && Number.isFinite(resolved),
+      rawSets: Number.isFinite(resolved) ? resolved : undefined,
     })
 
     // Recorded positionally, so sorting cannot be thrown off by a name the

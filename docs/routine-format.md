@@ -143,40 +143,48 @@ untouched:
 
 ## Traps
 
-These are the four ways to get a surprising result. All four are visible in the
-import preview before anything is saved — **read the preview**, it lists every
-day and every exercise exactly as it will be created.
+Four ways to get a surprising result. The import preview now catches most of
+them before anything is saved, but it is still worth writing the file so the
+question never comes up.
 
-### 1. Do not write weight × reps
+**The app will not create an exercise from a line it couldn't read.** If a line
+has no recognisable set count *and* nothing in your library matches it, it is
+listed under "Couldn't read these lines" and **skipped by default** — you can
+correct the name inline, or let it go. Nothing is written until you tap Import.
+
+### 1. Do not write weight × reps — *warns*
 
 ```markdown
-- Squat 100x5     ← 100 SETS (capped at 30), not 100 kg
+- Squat 100x5     ← 100 SETS, not 100 kg
 - Squat 40x5      ← 40 sets
 ```
 
-The first number is always sets. Put the load in the note, after the scheme:
+The first number is always sets. The preview now flags anything above 8 —
+*"40 sets — did you mean 40 kg?"* — but it is a warning, not a refusal, because
+occasionally you really do want twelve sets. Put the load in the note instead:
 
 ```markdown
 - Squat 5x5 @100kg     ← 5 sets, note "5x5 @100kg"
 ```
 
-### 2. Do not put the weight before the scheme
+### 2. Do not put the weight before the scheme — *caught*
 
 ```markdown
 - Squat 100kg x 5
 ```
 
-No scheme is recognised here, so you get **3 default sets** and an exercise
-named literally `Squat 100kg x 5`, which then clutters your library. Write the
-sets first:
+No scheme is recognised here. The trailing `x 5` is stripped as a fragment,
+leaving `Squat 100kg`, which matches nothing in your library — so it lands in
+"Couldn't read these lines" and is skipped unless you fix it. Write the sets
+first and the question disappears:
 
 ```markdown
 - Squat 5x5 @ 100kg
 ```
 
-### 3. No free-floating prose
+### 3. Free-floating prose — *caught*
 
-Every non-heading line becomes an exercise. This:
+Every non-heading line is read as an exercise. This:
 
 ```markdown
 ## Day A
@@ -185,8 +193,9 @@ Every non-heading line becomes an exercise. This:
 Deload every fourth week.
 ```
 
-creates an exercise called "Deload every fourth week." Put standing notes in a
-heading, or attach them to an exercise:
+used to create an exercise called "Deload every fourth week." It now has no set
+count and no library match, so it is flagged and skipped. Still cleaner to put
+standing notes where they belong:
 
 ```markdown
 ## Day A (deload every 4th week)

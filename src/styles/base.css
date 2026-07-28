@@ -414,6 +414,17 @@ h3 {
   margin: 0 auto 18px;
 }
 
+/* An inline notice that needs to be noticed, not just present. */
+.callout--warn {
+  border-color: color-mix(in srgb, var(--warn) 45%, var(--border));
+  background: color-mix(in srgb, var(--warn) 9%, transparent);
+}
+
+.callout--ok {
+  border-color: color-mix(in srgb, var(--ok) 40%, var(--border));
+  background: color-mix(in srgb, var(--ok) 8%, transparent);
+}
+
 .divider {
   height: 1px;
   background: var(--border);

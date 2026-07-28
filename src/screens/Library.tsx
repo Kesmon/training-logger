@@ -4,6 +4,7 @@ import { ExercisePicker } from '../components/ExercisePicker'
 import { IconChevron, IconPlus } from '../components/Icons'
 import { Empty, Screen } from '../components/Screen'
 import { equipmentLabel, fmtDate } from '../core/format'
+import { findLibraryIssues } from '../core/library/duplicates'
 import { listExercises } from '../db/queries'
 import { db } from '../db/schema'
 import { Link, navigate } from '../router'
@@ -27,6 +28,11 @@ export function Library() {
     [],
     [],
   )
+
+  const issueCount = useLiveQuery(async () => {
+    const issues = findLibraryIssues(await db.exercises.toArray())
+    return issues.merges.length + issues.renames.length
+  }, [], 0)
 
   const key = query.trim().toLowerCase()
   const shown = exercises.filter(
@@ -58,6 +64,22 @@ export function Library() {
 
           {tab === 'exercises' ? (
             <div className="stack">
+              {issueCount > 0 && (
+                <button
+                  className="card small callout--warn"
+                  style={{ textAlign: 'left' }}
+                  onClick={() => navigate('/library/cleanup')}
+                >
+                  <strong>
+                    {issueCount} exercise{issueCount === 1 ? '' : 's'} may be duplicates
+                  </strong>
+                  <div className="tiny" style={{ marginTop: 2 }}>
+                    Usually left behind by an import that didn’t parse. Tap to review and merge —
+                    their logged sets move with them.
+                  </div>
+                </button>
+              )}
+
               {exercises.length > 0 && (
                 <input
                   value={query}

@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
   addSet,
-  completeSet,
   createExercise,
+  setSetStatus,
   finishSession,
   startSession,
   updateSet,
@@ -30,15 +30,15 @@ async function seed() {
 
   const warmup = await addSet(session.id, squat)
   await updateSet(warmup.id, { weightKg: 60, reps: 5, setType: 'warmup' })
-  await completeSet(warmup.id, true)
+  await setSetStatus(warmup.id, 'completed')
 
   const first = await addSet(session.id, squat)
   await updateSet(first.id, { weightKg: 137.5, reps: 5, effortType: 'rpe', effortValue: 8 })
-  await completeSet(first.id, true)
+  await setSetStatus(first.id, 'completed')
 
   const second = await addSet(session.id, squat)
   await updateSet(second.id, { weightKg: 140, reps: 5, effortType: 'rpe', effortValue: 9 })
-  await completeSet(second.id, true)
+  await setSetStatus(second.id, 'completed')
 
   await finishSession(session.id)
   return { squat, sessionId: session.id }
@@ -163,12 +163,95 @@ describe('CSV export', () => {
     expect(rows.some((r) => r.includes('Unfinished day'))).toBe(false)
   })
 
+  it('keeps skipped and unlogged sets from a finished session', async () => {
+    const squat = await createExercise({ name: 'Squat', equipment: 'barbell' })
+    const session = await startSession({ dayName: 'Day A' })
+
+    const done = await addSet(session.id, squat)
+    await updateSet(done.id, { weightKg: 100, reps: 5 })
+    await setSetStatus(done.id, 'completed')
+
+    // Deliberately skipped — a decision, and a different fact from...
+    const skipped = await addSet(session.id, squat)
+    await setSetStatus(skipped.id, 'skipped')
+
+    // ...simply never getting to it.
+    await addSet(session.id, squat)
+
+    await finishSession(session.id)
+
+    // Previously all three of these collapsed to one row, because finishing a
+    // session deleted anything unticked.
+    expect(await db.setEntries.where('sessionId').equals(session.id).count()).toBe(3)
+
+    const rows = bundleToCsv(await buildBundle()).split('\r\n')
+    const header = rows[0]!.split(',')
+    const col = (row: string, name: string) => row.split(',')[header.indexOf(name)]
+
+    expect(rows).toHaveLength(4) // header + all three
+    expect(rows.slice(1).map((r) => col(r, 'set_status'))).toEqual([
+      'completed',
+      'skipped',
+      'not_logged',
+    ])
+  })
+
+  it('never exports performance data for a set that was not performed', async () => {
+    const squat = await createExercise({ name: 'Squat', equipment: 'barbell' })
+    const session = await startSession({ dayName: 'Day A' })
+
+    const first = await addSet(session.id, squat)
+    await updateSet(first.id, { weightKg: 100, reps: 5, effortType: 'rpe', effortValue: 8 })
+    await setSetStatus(first.id, 'completed')
+
+    // addSet seeds from the previous set, so this untouched row is carrying
+    // 100 kg x 5 that was never lifted. It must not export as if it had been.
+    const untouched = await addSet(session.id, squat)
+    expect((await db.setEntries.get(untouched.id))!.weightKg).toBe(100)
+
+    await finishSession(session.id)
+
+    const rows = bundleToCsv(await buildBundle()).split('\r\n')
+    const header = rows[0]!.split(',')
+    const notLogged = rows.slice(1).find((r) => r.split(',')[header.indexOf('set_status')] === 'not_logged')!
+    const col = (name: string) => notLogged.split(',')[header.indexOf(name)]
+
+    expect(col('weight_kg')).toBe('')
+    expect(col('reps')).toBe('')
+    expect(col('effort_type')).toBe('')
+    expect(col('effort_value')).toBe('')
+    expect(col('volume_kg')).toBe('')
+    expect(col('e1rm_kg')).toBe('')
+    expect(col('logged_at')).toBe('')
+    // Identity and ordering are still present — that is the point of the row.
+    expect(col('exercise')).toBe('Squat')
+    expect(col('set_number')).toBe('2')
+  })
+
+  it('does not count unperformed sets toward volume', async () => {
+    const squat = await createExercise({ name: 'Squat', equipment: 'barbell' })
+    const session = await startSession()
+    const done = await addSet(session.id, squat)
+    await updateSet(done.id, { weightKg: 100, reps: 5 })
+    await setSetStatus(done.id, 'completed')
+    await addSet(session.id, squat) // seeded 100x5, never done
+    await finishSession(session.id)
+
+    const rows = bundleToCsv(await buildBundle()).split('\r\n')
+    const header = rows[0]!.split(',')
+    const volumes = rows
+      .slice(1)
+      .map((r) => r.split(',')[header.indexOf('volume_kg')])
+      .filter(Boolean)
+    expect(volumes).toEqual(['500'])
+  })
+
   it('quotes fields containing the delimiter', async () => {
     const squat = await createExercise({ name: 'Squat, paused', equipment: 'barbell' })
     const session = await startSession()
     const set = await addSet(session.id, squat)
     await updateSet(set.id, { weightKg: 100, reps: 3 })
-    await completeSet(set.id, true)
+    await setSetStatus(set.id, 'completed')
     await finishSession(session.id)
 
     const csv = bundleToCsv(await buildBundle(), 'international')

@@ -28,6 +28,16 @@ export type SetType =
 
 export type EffortType = 'rpe' | 'rir'
 
+/**
+ * What happened to a set.
+ *
+ * `planned` is a row that was laid out but never touched. Once its session is
+ * finished it exports as `not_logged` — which is deliberately distinct from
+ * `skipped`, because a decision to skip cannot be inferred from an untouched
+ * row and has to be recorded as one.
+ */
+export type SetStatus = 'planned' | 'completed' | 'skipped'
+
 /** Which inputs the logging screen renders for a given exercise. */
 export type LogField = 'weight' | 'reps' | 'effort' | 'tempo' | 'time' | 'distance' | 'band'
 
@@ -122,6 +132,12 @@ export interface SetEntry {
   timeSec?: number
   distanceM?: number
   bandColor?: string
+  status: SetStatus
+  /**
+   * Mirrors `status === 'completed'`. Kept as a separate stored field only
+   * because IndexedDB cannot index a string union usefully here and several
+   * hot queries filter on it. Always written through `setSetStatus`.
+   */
   isComplete: Flag
   loggedAt?: string
   notes?: string
@@ -172,6 +188,17 @@ export class TrainingDb extends Dexie {
       setEntries: 'id, sessionId, exerciseId, [sessionId+order], [exerciseId+date]',
       settings: 'id',
     })
+
+    // v2 introduces `status`. Existing rows only ever had two states, since
+    // anything unticked was deleted at session finish.
+    this.version(2).upgrade((tx) =>
+      tx
+        .table<SetEntry>('setEntries')
+        .toCollection()
+        .modify((set) => {
+          set.status = set.isComplete ? 'completed' : 'planned'
+        }),
+    )
   }
 }
 

@@ -51,6 +51,30 @@
   background: color-mix(in srgb, var(--ok) 7%, transparent);
 }
 
+/* A deliberate skip stays visible and legible — it is a recorded fact, not an
+   absence — but reads clearly as not-performed. */
+.setrow--skipped .setrow__main {
+  opacity: 0.5;
+}
+
+.setrow--skipped .numfield,
+.setrow--skipped .setrow__effort {
+  text-decoration: line-through;
+}
+
+.setrow--skipped .setrow__n::after {
+  content: 'skip';
+  font-size: 8.5px;
+  letter-spacing: 0.04em;
+  color: var(--warn);
+}
+
+.setrow--skipped .setrow__n {
+  flex-direction: column;
+  gap: 0;
+  line-height: 1.05;
+}
+
 .setrow__main {
   display: flex;
   align-items: center;

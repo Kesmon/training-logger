@@ -82,22 +82,31 @@ describe('the guide is accurate', () => {
   })
 
   it('the traps really are traps, exactly as described', () => {
-    // "the first number is always sets", capped at 30
+    // Trap 1: the first number is always sets, and it is flagged above 8.
     expect(parseRoutineText('- Squat 100x5').days[0]!.items[0]).toMatchObject({
       exercise: 'Squat',
       plannedSets: 30,
+      rawSets: 100, // the preview warns using the raw value, not the cap
+      recognised: true,
     })
-    // weight before the scheme swallows the whole line into the name
+
+    // Trap 2: weight before the scheme. The fragment is stripped and the line
+    // is marked unrecognised, which is what keeps it out of the library.
     expect(parseRoutineText('- Squat 100kg x 5').days[0]!.items[0]).toMatchObject({
-      exercise: 'Squat 100kg x 5',
+      exercise: 'Squat 100kg',
       plannedSets: 3,
+      recognised: false,
     })
-    // stray prose becomes an exercise
+
+    // Trap 3: stray prose is still parsed as an item, but unrecognised — the
+    // import preview is what stops it becoming an exercise.
     const prose = parseRoutineText('## Day A\n- Squat 5x5\n\nDeload every fourth week.')
     expect(prose.days[0]!.items.map((i) => i.exercise)).toEqual([
       'Squat',
-      'Deload every fourth week.',
+      'Deload every fourth week',
     ])
+    expect(prose.days[0]!.items[1]!.recognised).toBe(false)
+    expect(prose.days[0]!.items[0]!.recognised).toBe(true)
     // a deeper heading extends the day name rather than splitting it
     const deep = parseRoutineText('## Day A\n### Main\n- Squat 5x5\n### Accessory\n- Curl 3x12')
     expect(deep.days).toHaveLength(1)

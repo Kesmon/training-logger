@@ -37,29 +37,44 @@ export interface NameResolution {
   /** A close-but-not-exact candidate, offered to the user to confirm. */
   suggestion?: Exercise
   uses: number
+  /**
+   * No set scheme was recognised on the line AND nothing in the library matches
+   * it — so the app has no idea what this is. Creating an exercise from a guess
+   * put `chest row   x6 @` in the library permanently and split real history in
+   * two, so these default to being skipped and must be confirmed by hand.
+   */
+  unreadable: boolean
 }
 
 export type Decision =
   | { action: 'link'; exerciseId: string }
   | { action: 'create'; equipment: Equipment }
+  | { action: 'skip' }
+  | { action: 'rename'; name: string; equipment: Equipment }
 
 /** All distinct exercise names in a routine, each matched where possible. */
 export async function resolveNames(parsed: ParsedRoutine): Promise<NameResolution[]> {
-  const counts = new Map<string, number>()
+  const counts = new Map<string, { uses: number; recognised: boolean }>()
   for (const day of parsed.days) {
     for (const item of day.items) {
       const key = item.exercise.trim()
-      if (key) counts.set(key, (counts.get(key) ?? 0) + 1)
+      if (!key) continue
+      const prev = counts.get(key) ?? { uses: 0, recognised: false }
+      // One good occurrence vouches for the name across the whole file.
+      counts.set(key, {
+        uses: prev.uses + 1,
+        recognised: prev.recognised || item.recognised,
+      })
     }
   }
 
   const library = await listExercises(true)
   const out: NameResolution[] = []
 
-  for (const [name, uses] of counts) {
+  for (const [name, { uses, recognised }] of counts) {
     const existing = await findExerciseByName(name)
     if (existing) {
-      out.push({ name, existing, uses })
+      out.push({ name, existing, uses, unreadable: false })
       continue
     }
 
@@ -67,7 +82,7 @@ export async function resolveNames(parsed: ParsedRoutine): Promise<NameResolutio
     const normalised = normalise(name)
     const sameNormalised = library.find((e) => normalise(e.name) === normalised)
     if (sameNormalised) {
-      out.push({ name, existing: sameNormalised, uses })
+      out.push({ name, existing: sameNormalised, uses, unreadable: false })
       continue
     }
 
@@ -81,16 +96,28 @@ export async function resolveNames(parsed: ParsedRoutine): Promise<NameResolutio
       }
     }
     // 0.6 is high enough that "Bench Press" does not suggest "Leg Press".
-    out.push({ name, uses, suggestion: bestScore >= 0.6 ? best : undefined })
+    out.push({
+      name,
+      uses,
+      suggestion: bestScore >= 0.6 ? best : undefined,
+      unreadable: !recognised,
+    })
   }
 
-  return out.sort((a, b) => b.uses - a.uses || a.name.localeCompare(b.name))
+  // Unreadable lines first — they are the ones needing a decision.
+  return out.sort(
+    (a, b) =>
+      Number(b.unreadable) - Number(a.unreadable) ||
+      b.uses - a.uses ||
+      a.name.localeCompare(b.name),
+  )
 }
 
 export interface CommitResult {
   routineId: string
   created: number
   linked: number
+  skipped: number
 }
 
 /**
@@ -106,9 +133,17 @@ export async function commitRoutine(
   const byName = new Map<string, string>()
   let created = 0
   let linked = 0
+  let skipped = 0
 
   for (const resolution of resolutions) {
     const decision = decisions.get(resolution.name)
+
+    // Left out of byName entirely, so every item using this name is dropped
+    // below rather than creating an exercise nobody asked for.
+    if (decision?.action === 'skip') {
+      skipped++
+      continue
+    }
 
     if (resolution.existing && !decision) {
       byName.set(resolution.name, resolution.existing.id)
@@ -120,6 +155,33 @@ export async function commitRoutine(
       byName.set(resolution.name, decision.exerciseId)
       await addExerciseAlias(decision.exerciseId, resolution.name)
       linked++
+      continue
+    }
+
+    if (decision?.action === 'rename') {
+      const corrected = decision.name.trim()
+      if (!corrected) {
+        skipped++
+        continue
+      }
+      // A corrected name often turns out to already exist — that is the whole
+      // point of letting it be fixed here rather than after the fact.
+      const match = await findExerciseByName(corrected)
+      if (match) {
+        byName.set(resolution.name, match.id)
+        linked++
+      } else {
+        const made = await createExercise({ name: corrected, equipment: decision.equipment })
+        byName.set(resolution.name, made.id)
+        created++
+      }
+      continue
+    }
+
+    // An unreadable name reaching here without a decision would be exactly the
+    // old bug. The preview defaults these to skip; this is the backstop.
+    if (resolution.unreadable) {
+      skipped++
       continue
     }
 
@@ -160,7 +222,7 @@ export async function commitRoutine(
     }
   })
 
-  return { routineId, created, linked }
+  return { routineId, created, linked, skipped }
 }
 
 export async function deleteRoutine(routineId: string): Promise<void> {
