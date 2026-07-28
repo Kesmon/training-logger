@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 // otherwise browser-only project — and the guide becomes a real dependency of
 // the test rather than something read at an assumed path.
 import DOC from '../../../docs/routine-format.md?raw'
+import { parseRoutineCsv } from './parseRoutineCsv'
 import { parseRoutineText } from './parseRoutineText'
 
 /**
@@ -13,6 +14,15 @@ import { parseRoutineText } from './parseRoutineText'
 function fences(): string[] {
   const out: string[] = []
   const re = /```markdown\r?\n([\s\S]*?)```/g
+  let m: RegExpExecArray | null
+  while ((m = re.exec(DOC))) out.push(m[1]!)
+  return out
+}
+
+/** The guide's CSV blocks, which a different parser has to agree with. */
+function csvFences(): string[] {
+  const out: string[] = []
+  const re = /```csv\r?\n([\s\S]*?)```/g
   let m: RegExpExecArray | null
   while ((m = re.exec(DOC))) out.push(m[1]!)
   return out
@@ -190,6 +200,61 @@ describe('the guide is accurate', () => {
       'Barbell Back Squat',
       'Romanian Deadlift',
     ])
+  })
+
+  it('the CSV example parses as the column table promises', () => {
+    const csv = csvFences().find((f) => f.includes('Winter Block'))!
+    const routine = parseRoutineCsv(csv)
+
+    expect(routine.name).toBe('Winter Block')
+    expect(routine.days.map((d) => d.name)).toEqual(['Day A', 'Day B'])
+
+    const [squat, bench] = routine.days[0]!.items
+    expect(squat).toMatchObject({ exercise: 'Barbell Back Squat', plannedSets: 5, plannedRepsMin: 3 })
+    // A range in the reps column, which used to be treated as a note.
+    expect(bench).toMatchObject({ plannedRepsMin: 8, plannedRepsMax: 10 })
+
+    const [split, plank] = routine.days[1]!.items
+    expect(split).toMatchObject({ plannedSets: 2, plannedRepsMin: 10, unilateral: true })
+    expect(plank).toMatchObject({ plannedSets: 3, plannedDurationSec: 30 })
+  })
+
+  it('the guide is right that holds and per-side work read the same from a note', () => {
+    const csv = csvFences().find((f) => f.includes('Bulgarian Split Squat,2,2x10 per leg'))!
+    const items = parseRoutineCsv(csv).days[0]!.items
+    expect(items[0]).toMatchObject({ exercise: 'Plank', plannedDurationSec: 30 })
+    expect(items[1]).toMatchObject({ exercise: 'Bulgarian Split Squat', unilateral: true })
+  })
+
+  it('the Norwegian semicolon example works and says so', () => {
+    const csv = csvFences().find((f) => f.includes('Knebøy'))!
+    const routine = parseRoutineCsv(csv)
+    expect(routine.days[0]!.name).toBe('Dag A')
+    expect(routine.days[0]!.items[0]).toMatchObject({ exercise: 'Knebøy', plannedRepsMin: 5 })
+    expect(routine.days[0]!.items[1]).toMatchObject({ plannedRepsMin: 8, plannedRepsMax: 10 })
+    // The guide quotes this warning verbatim.
+    expect(routine.warnings.some((w) => w.includes(';'))).toBe(true)
+  })
+
+  it('the everything-together example uses every notation it claims to', () => {
+    const block = fences().find((f) => f.includes('Reintroduction'))!
+    const routine = parseRoutineText(block)
+
+    expect(routine.note).toBe('Deload week. Everything at 70%, stop a rep short.')
+    expect(routine.days.map((d) => d.note)).toEqual([
+      "If you're still sore, cut the RDLs.",
+      'Two rowing sets this week, no more.',
+    ])
+
+    const flat = routine.days.flatMap((d) => d.items)
+    const by = (name: string) => flat.find((i) => i.exercise === name)!
+
+    expect(by('Barbell Back Squat')).toMatchObject({ plannedRepsMin: 8, plannedRepsMax: 10 })
+    expect(by('Bulgarian Split Squat')).toMatchObject({ plannedSets: 2, unilateral: true })
+    expect(by('Plank')).toMatchObject({ plannedDurationSec: 30 })
+    expect(by('Dead bug')).toMatchObject({ unilateral: true })
+    // The dash before a note must not become a rep range.
+    expect(by('Chest-supported row')).toMatchObject({ plannedRepsMin: 6, plannedRepsMax: 6 })
   })
 
   it('every unilateral spelling the guide lists is recognised', () => {

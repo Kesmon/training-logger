@@ -1,10 +1,15 @@
 # Writing routines for import
 
-How to write a training programme as a Markdown file the app can read.
+How to write a training programme the app can read — as **Markdown** (easiest to
+write by hand, and the only format that carries session notes) or as a
+**spreadsheet CSV**.
 
-Save it as `.md`, put it somewhere the iPhone Files app can see — iCloud Drive
-is easiest — then in the app go to **Settings → Import a routine → Choose a
-file**. You can also paste the text straight into the box instead.
+Save the file somewhere the iPhone Files app can see — iCloud Drive is easiest —
+then in the app go to **Settings → Import a routine → Choose a file**. You can
+also paste the text straight into the box instead.
+
+Most of this page is about Markdown; [CSV](#from-a-spreadsheet-csv) has its own
+section near the end.
 
 ---
 
@@ -14,6 +19,7 @@ file**. You can also paste the text straight into the box instead.
 # Winter Block
 
 ## Day A — Squat / Bench
+> Warm up the hips properly before squatting.
 - Barbell Back Squat 5x3
 - Bench Press 3x8
 - Barbell Row 3x10
@@ -23,10 +29,11 @@ file**. You can also paste the text straight into the box instead.
 - Deadlift 4x3
 - Overhead Press 3x8
 - Lat Pulldown 3x12
-- Hanging Leg Raise 3x12
+- Plank 3x30s
 ```
 
-`#` names the routine, `##` names each day, one exercise per line.
+`#` names the routine, `##` names each day, one exercise per line, and a `>`
+line is a note for that whole day.
 
 **The only rule that really matters: the first number is the number of sets.**
 
@@ -96,7 +103,8 @@ Pull:
 ```
 
 Days with no exercises under them are dropped, so a `## Rest` heading costs you
-nothing.
+nothing. That includes a day holding only a note — if you want the note kept,
+the day needs at least one exercise.
 
 ### Exercises
 
@@ -299,6 +307,11 @@ exercise — *"stop if the knee complains"*, *"superset the last two"*, *"deload
 week"*. Written as plain prose it would be skipped as an unreadable line; quoted,
 it ends up where it is useful.
 
+Two things to know: a day made only of a note and no exercises is dropped along
+with everything else empty, and notes are **not** exported — they are the
+coach's own words going one way, so there is nothing to send back. Notes only
+work in Markdown; a CSV has nowhere to put them.
+
 ## Re-importing a routine
 
 Importing a routine with a name you have used before creates a **new version**
@@ -323,7 +336,75 @@ Worth doing once: settle on one name per lift and reuse it. `Bench Press`,
 `Barbell Bench Press` and `BB Bench` are three different exercises to the app
 until you tell it otherwise — and three separate progress charts.
 
+If that has already happened, **Settings → Clean up exercise library** finds
+near-duplicates and offers to merge them. Merging moves every logged set onto the
+entry you keep, so a split history becomes one continuous progression again, and
+remembers the old spelling so a future import matches it rather than splitting
+things a second time.
+
 Norwegian names are fine (`Knebøy`, `Markløft`, `Benkpress`); just be consistent.
+
+---
+
+## From a spreadsheet (CSV)
+
+Everything above about set counts, ranges, holds and per-side work applies here
+too — it is the same parser. Only the packaging differs.
+
+```csv
+routine,day,order,exercise,sets,reps,note
+Winter Block,Day A,1,Barbell Back Squat,5,3,@RPE8 top set
+Winter Block,Day A,2,Bench Press,3,8-10,
+Winter Block,Day B,1,Bulgarian Split Squat,2,10,per leg
+Winter Block,Day B,2,Plank,3,,3x30s
+```
+
+Only **`exercise`** is required. Everything else is optional and can be in any
+order.
+
+| Column | Also accepts | Notes |
+|---|---|---|
+| `exercise` | `movement`, `lift`, `øvelse`, `name` | required |
+| `sets` | `set`, `sett` | defaults to 3 |
+| `reps` | `rep`, `repetitions`, `repetisjoner` | `8` or a range `8-10` |
+| `day` | `workout`, `session`, `dag` | defaults to one day |
+| `routine` | `program`, `plan`, `rutine` | else the file name is used |
+| `order` | `no`, `nr`, `#`, `rekkefølge` | else row order |
+| `note` | `notes`, `target`, `kommentar` | free text |
+
+**A `reps` column now means prescribed reps.** It used to be treated as a note.
+If you have an older sheet that put `5x5` under a `reps` heading, that still
+works — the scheme is read out of it — but a bare `8-10` there is now a rep
+range rather than a piece of text.
+
+Holds, distances and per-side work can go in the exercise cell or the note, and
+both are read the same way:
+
+```csv
+exercise,sets,note
+Plank,3,3x30s
+Bulgarian Split Squat,2,2x10 per leg
+```
+
+Session notes have no home in a CSV — for those, use Markdown.
+
+### Excel and semicolons
+
+Excel in a Norwegian, German or French locale writes `;` between columns rather
+than `,`, and uses `,` as the decimal point. The importer detects this and says
+so in the preview: *"Detected ";" as the column separator."* Tabs work too. The
+byte-order mark Excel prepends is handled.
+
+Norwegian headers are understood as-is:
+
+```csv
+dag;øvelse;sett;reps
+Dag A;Knebøy;5;5
+Dag A;Benkpress;3;8-10
+```
+
+If a file comes in as one giant column, the separator was guessed wrong — say so
+and it can be fixed.
 
 ---
 
@@ -353,6 +434,32 @@ Norwegian names are fine (`Knebøy`, `Markløft`, `Benkpress`); just be consiste
 - Overhead Press 3x5 — 65/75/85%, last set AMRAP
 - Overhead Press 5x10 @50% — BBB
 - Chin-Up 5x10
+```
+
+### A block using everything
+
+Holds, per-side work, rep ranges and day notes together — closer to how a
+rehab-aware or accessory-heavy block actually reads:
+
+```markdown
+# Block 2 — Reintroduction
+
+> Deload week. Everything at 70%, stop a rep short.
+
+## S1 — Lower
+> If you're still sore, cut the RDLs.
+- Barbell Back Squat 3x8-10 — 3 RIR
+- Romanian Deadlift 3x8
+- Bulgarian Split Squat 2x10 per leg
+- Seated Leg Curl 3x12
+
+## S2 — Upper maintenance + core
+> Two rowing sets this week, no more.
+- Chest-supported row 2x6 — 3 RIR. Your entire weekly upper body dose.
+- Face pull 2x15 — light, rotator cuff
+- Pallof press 2x12 each side
+- Plank 3x30s
+- Dead bug 3x10 per side
 ```
 
 ### Hypertrophy split
@@ -389,7 +496,7 @@ Norwegian names are fine (`Knebøy`, `Markløft`, `Benkpress`); just be consiste
 - The first number on each line is the **set count**, not a weight
 - Add `s` for a hold, `m` for a distance, `per leg` for unilateral work
 - Load goes **after** the scheme, where it becomes a note
-- No stray sentences — a line the app can't read is skipped, not guessed at
+- Session instructions go on a `>` line — plain sentences get skipped
 - Exercise names spelled the same way as last time
 - Check the preview: it shows every day and exercise, flags which are new, and
   lists anything it couldn't read, before anything is written
@@ -418,3 +525,10 @@ set carries its own prescription:
 `skipped` means you tapped **Skip set** — a decision. `not_logged` means the row
 was never touched. They are different facts and the app will not guess between
 them, so tap Skip when you mean it.
+
+Day notes are the one thing that does **not** appear: they travel from the coach
+to the phone, so there is nothing to report back.
+
+Finishing a session offers to export just that session, named
+`training-log-2026-07-28-S1.csv`. The whole history is under
+**Settings → Export log**, named `training-log-all-…` so the two never collide.
