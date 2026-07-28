@@ -12,6 +12,27 @@ import { clampSets, extractSets, type ParsedDay, type ParsedRoutine } from './ty
  */
 
 const BULLET = /^\s*(?:[-*+•]|\d+[.)])\s+/
+/** A task-list marker, for people who write routines as checklists. */
+const CHECKBOX = /^\[[ xX]?\]\s*/
+
+/**
+ * Removes inline Markdown so `**Squat**` does not become an exercise literally
+ * named `**Squat**`.
+ *
+ * Single-asterisk emphasis is deliberately left alone: `*` is also accepted as
+ * a multiplication sign in set schemes, and stripping it would turn a line like
+ * "Squat 5*5 then 3*3" into nonsense.
+ */
+function stripInlineMarkdown(s: string): string {
+  return s
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1') // [name](url) -> name
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/~~([^~]+)~~/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/_([^_]+)_/g, '$1')
+    .trim()
+}
 const HEADING = /^\s*(#{1,6})\s*(.+?)\s*#*\s*$/
 /** "Day A:" — a common way to write a day without Markdown. */
 const COLON_HEADING = /^\s*(.{1,40}?):\s*$/
@@ -40,7 +61,7 @@ export function parseRoutineText(text: string, fallbackName = 'Imported routine'
     const heading = line.match(HEADING)
     if (heading) {
       const level = heading[1]!.length
-      const title = heading[2]!.trim()
+      const title = stripInlineMarkdown(heading[2]!)
       if (!title) continue
 
       // The first level-1 heading titles the routine; deeper ones are days.
@@ -61,7 +82,7 @@ export function parseRoutineText(text: string, fallbackName = 'Imported routine'
       continue
     }
 
-    const content = line.replace(BULLET, '').trim()
+    const content = stripInlineMarkdown(line.replace(BULLET, '').replace(CHECKBOX, '').trim())
     if (!content) continue
 
     if (!current) startDay('Day 1')

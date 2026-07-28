@@ -99,6 +99,34 @@ Pull:
     expect(routine.days[0]!.name).toBe('Day 1')
   })
 
+  it('strips inline Markdown from names', () => {
+    const routine = parseRoutineText(`# **Winter block**
+## _Day A_
+- **Barbell Back Squat** 5x3
+- \`Bench Press\` 3x10
+- [Romanian Deadlift](https://example.com/rdl) 3x8`)
+
+    expect(routine.name).toBe('Winter block')
+    expect(routine.days[0]!.name).toBe('Day A')
+    expect(routine.days[0]!.items.map((i) => i.exercise)).toEqual([
+      'Barbell Back Squat',
+      'Bench Press',
+      'Romanian Deadlift',
+    ])
+  })
+
+  it('leaves a single asterisk alone, since it is also a set separator', () => {
+    const routine = parseRoutineText('- Squat 5*5')
+    expect(routine.days[0]!.items[0]).toMatchObject({ exercise: 'Squat', plannedSets: 5 })
+  })
+
+  it('accepts task-list checkboxes', () => {
+    const routine = parseRoutineText(`## Day A
+- [ ] Squat 5x5
+- [x] Bench Press 3x8`)
+    expect(routine.days[0]!.items.map((i) => i.exercise)).toEqual(['Squat', 'Bench Press'])
+  })
+
   it('defaults to three sets when none is given', () => {
     expect(parseRoutineText('- Face Pull').days[0]!.items[0]!.plannedSets).toBe(3)
   })

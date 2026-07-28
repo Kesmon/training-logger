@@ -325,7 +325,9 @@ export function ImportScreen() {
                 {TEXT_EXAMPLE}
               </pre>
               <p className="tiny faint" style={{ marginTop: 8 }}>
-                A trailing <code>5x3</code> sets the number of sets; the rest becomes a note.
+                The <strong>first</strong> number is the set count — <code>5x3</code> means five
+                sets, not 5&nbsp;kg. Everything after it is kept as a note and shown while you
+                lift, but never enforced.
               </p>
             </div>
           </div>

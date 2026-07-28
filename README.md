@@ -71,9 +71,14 @@ set count out of the exercise cell itself if you wrote `Squat 5x5`.
 - Deadlift 5x3
 ```
 
-`#` names the routine, `##` a day, and each bullet an exercise. A trailing `5x3`
-sets the number of sets and the rest becomes a note. A bare list with no headings
-becomes a one-day routine, and `Day A:` works as a heading too.
+`#` names the routine, `##` a day, and each bullet an exercise. The **first**
+number is the set count — `5x3` means five sets — and the rest of the line is
+kept as a note. A bare list with no headings becomes a one-day routine, and
+`Day A:` works as a heading too.
+
+**→ [Full routine-writing guide](docs/routine-format.md)** — every accepted
+notation, the four ways to get a surprising result, and worked examples you can
+copy. Its examples are covered by tests, so it cannot drift from the parser.
 
 Routines carry **structure only** — exercise order and how many sets. Nothing is
 prescribed; the note is shown while you lift but never enforced.
