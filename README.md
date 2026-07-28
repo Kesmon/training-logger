@@ -101,7 +101,13 @@ Settings → Data.
   writing formulas. Unticked planned sets are excluded.
 
 Both go through the iOS share sheet, so you can drop them into Files, iCloud
-Drive, or mail them to yourself.
+Drive, or mail them to yourself. Finishing a session offers its own export on the
+spot, named `training-log-2026-07-28-S1.csv` — an index per day that is never
+reused, so re-sending replaces rather than piles up.
+
+**→ [Fewer taps with an iOS Shortcut](docs/ios-shortcut.md)** — a share-sheet
+shortcut that files exports into a shared iCloud folder without you navigating
+anywhere, plus an honest account of what iOS will not let a web app do.
 
 Set **Spreadsheet format → `a; b`** if your Excel expects semicolons and comma
 decimals; it switches both together, which is what makes the file parse.

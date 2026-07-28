@@ -46,7 +46,7 @@ export function RoutineDetail({ id }: { id: string }) {
 
   const { routine, days } = data
 
-  async function start(dayId: string, dayName: string) {
+  async function start(dayId: string, dayName: string, dayNote?: string) {
     const session = await startSession({
       routineDayId: dayId,
       routineId: id,
@@ -55,6 +55,9 @@ export function RoutineDetail({ id }: { id: string }) {
       // change which revision an already-logged session was performed under.
       routineVersion: routine!.version,
       dayName,
+      // Snapshotted so it survives the routine being superseded, and so it is
+      // on the phone in the gym rather than in a document she is not holding.
+      dayNote: dayNote,
     })
     // The routine supplies structure only — blank sets, no prescribed loads.
     await seedSessionFromRoutineDay(session.id, dayId)
@@ -89,15 +92,20 @@ export function RoutineDetail({ id }: { id: string }) {
 
           {days.map(({ day, items }) => (
             <div key={day.id} className="card">
-              <div className="row" style={{ marginBottom: 8 }}>
+              <div className="row" style={{ marginBottom: day.notes ? 4 : 8 }}>
                 <div style={{ flex: 1, fontWeight: 620 }}>{day.name}</div>
                 <button
                   className="btn btn--sm btn--primary"
-                  onClick={() => void start(day.id, day.name)}
+                  onClick={() => void start(day.id, day.name, day.notes)}
                 >
                   Start
                 </button>
               </div>
+              {day.notes && (
+                <div className="daynote" style={{ marginBottom: 8 }}>
+                  {day.notes}
+                </div>
+              )}
               <div className="stack" style={{ gap: 5 }}>
                 {items.map(({ item, name }) => (
                   <div key={item.id} className="row small" style={{ gap: 8 }}>

@@ -143,6 +143,7 @@ export async function startSession(opts?: {
   routineName?: string
   routineVersion?: number
   dayName?: string
+  dayNote?: string
 }): Promise<Session> {
   const session: Session = {
     id: newId(),

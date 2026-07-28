@@ -140,6 +140,12 @@ export interface Session {
   /** The revision performed under, so re-importing mid-block cannot rewrite it. */
   routineVersion?: number
   dayName?: string
+  /**
+   * The coach's instruction for this day, snapshotted from the routine. Kept
+   * apart from `notes`, which is hers — one is guidance received, the other is
+   * a record of how it went.
+   */
+  dayNote?: string
   bodyweightKg?: number
   sessionRpe?: number
   location?: string

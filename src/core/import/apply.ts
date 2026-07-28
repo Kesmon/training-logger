@@ -254,6 +254,7 @@ export async function commitRoutine(
         version,
         source: parsed.source,
         sourceRaw,
+        notes: parsed.note,
         createdAt: nowIso(),
       })
 
@@ -264,6 +265,7 @@ export async function commitRoutine(
           routineId,
           order: dayIndex,
           name: day.name,
+          notes: day.note,
         })
 
         for (const [itemIndex, item] of day.items.entries()) {

@@ -149,6 +149,10 @@ export function SessionScreen({ id }: { id: string }) {
             </div>
           </div>
 
+          {/* The coach's instruction for the day. It exists precisely so it is
+              readable mid-session, so it sits above the exercises. */}
+          {session.dayNote && <div className="daynote">{session.dayNote}</div>}
+
           {blocks.length === 0 && (
             <p className="small faint" style={{ textAlign: 'center', padding: '28px 12px' }}>
               No exercises yet — add your first one below.

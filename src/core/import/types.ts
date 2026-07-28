@@ -31,11 +31,18 @@ export interface ParsedItem {
 export interface ParsedDay {
   name: string
   items: ParsedItem[]
+  /**
+   * A session-level instruction — `> if you're still sore, cut the RDLs`.
+   * Previously such a line became an exercise named after the sentence.
+   */
+  note?: string
 }
 
 export interface ParsedRoutine {
   name: string
   days: ParsedDay[]
+  /** A blockquote before any day heading: guidance for the whole block. */
+  note?: string
   source: 'csv' | 'text'
   /** Non-fatal notes about what the parser had to guess or skip. */
   warnings: string[]

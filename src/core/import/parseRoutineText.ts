@@ -12,6 +12,12 @@ import { clampSets, extractSets, type ParsedDay, type ParsedRoutine } from './ty
  */
 
 const BULLET = /^\s*(?:[-*+•]|\d+[.)])\s+/
+/**
+ * A coach's instruction rather than an exercise — `> if you're still sore, cut
+ * the RDLs`. Without this, such a line became an exercise named after the
+ * sentence, which is one of the documented import traps.
+ */
+const BLOCKQUOTE = /^\s*>\s?(.*)$/
 /** A task-list marker, for people who write routines as checklists. */
 const CHECKBOX = /^\[[ xX]?\]\s*/
 
@@ -42,6 +48,7 @@ export function parseRoutineText(text: string, fallbackName = 'Imported routine'
   const lines = text.replace(/^﻿/, '').split(/\r?\n/)
 
   let routineName = ''
+  let routineNote = ''
   const days: ParsedDay[] = []
   let current: ParsedDay | undefined
 
@@ -73,6 +80,19 @@ export function parseRoutineText(text: string, fallbackName = 'Imported routine'
       if (level <= dayLevel) startDay(title)
       else if (current) current.name = `${current.name} · ${title}`
       else startDay(title)
+      continue
+    }
+
+    // Checked before the bullet strip, since '>' is not a bullet and a
+    // blockquote may legitimately contain commas, colons and full stops that
+    // would otherwise trip the day-heading and exercise paths below.
+    const quote = line.match(BLOCKQUOTE)
+    if (quote) {
+      const text = stripInlineMarkdown(quote[1] ?? '')
+      if (!text) continue
+      // Before any day heading it is guidance for the whole block.
+      if (current) current.note = current.note ? `${current.note} ${text}` : text
+      else routineNote = routineNote ? `${routineNote} ${text}` : text
       continue
     }
 
@@ -116,6 +136,7 @@ export function parseRoutineText(text: string, fallbackName = 'Imported routine'
   return {
     name: routineName || fallbackName,
     days: withItems,
+    note: routineNote || undefined,
     source: 'text',
     warnings,
   }

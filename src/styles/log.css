@@ -25,6 +25,16 @@
   white-space: nowrap;
 }
 
+/* A note from the coach for the whole session. Quoted rather than styled as a
+   card, so it reads as someone else's words rather than app chrome. */
+.daynote {
+  border-left: 3px solid var(--accent);
+  padding: 2px 0 2px 11px;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text);
+}
+
 /* The prescription: an instruction, so it reads louder than the history hint
    below it without competing with the sets themselves. */
 .exblock__rx {

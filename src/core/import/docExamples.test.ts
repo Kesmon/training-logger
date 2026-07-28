@@ -179,6 +179,19 @@ describe('the guide is accurate', () => {
     }
   })
 
+  it('the day-note example lands where the guide says it does', () => {
+    const block = fences().find((f) => f.includes('Deload week'))!
+    const routine = parseRoutineText(block)
+
+    expect(routine.note).toBe('Deload week. Everything at 70%.')
+    expect(routine.days[0]!.note).toBe("If you're still sore, cut the RDLs.")
+    // And neither quote became an exercise.
+    expect(routine.days[0]!.items.map((i) => i.exercise)).toEqual([
+      'Barbell Back Squat',
+      'Romanian Deadlift',
+    ])
+  })
+
   it('every unilateral spelling the guide lists is recognised', () => {
     for (const line of [
       'Bulgarian Split Squat 2x10 per leg',

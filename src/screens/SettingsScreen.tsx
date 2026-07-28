@@ -2,6 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { useState } from 'react'
 import { Screen } from '../components/Screen'
 import { Sheet } from '../components/Sheet'
+import { allSessionsFilename } from '../core/export/filename'
 import { UTF8_BOM, bundleToCsv } from '../core/export/toCsv'
 import { BundleError, bundleToJson, buildBundle, parseBundle, restoreBundle } from '../core/export/toJson'
 import { findLibraryIssues } from '../core/library/duplicates'
@@ -55,7 +56,13 @@ export function SettingsScreen() {
       // The BOM is what makes Excel on Windows read this as UTF-8 rather than
       // the ANSI codepage — without it "Markløft" arrives as "MarklÃ¸ft".
       // Written as an escape, not a literal, so it survives editors and diffs.
-      const how = await deliverFile(`training-log-${todayStamp()}.csv`, UTF8_BOM + csv, 'text/csv')
+      // Named apart from the per-session files, so a folder holding both stays
+      // readable and a whole-history export never overwrites a session.
+      const how = await deliverFile(
+        allSessionsFilename(todayStamp()),
+        UTF8_BOM + csv,
+        'text/csv',
+      )
       await saveSettings({ lastExportAt: new Date().toISOString(), sessionsSinceExport: 0 })
       setMessage(how === 'shared' ? 'CSV shared.' : 'CSV downloaded.')
     } catch (e) {
@@ -230,7 +237,8 @@ export function SettingsScreen() {
                 {busy === 'csv' ? 'Preparing…' : 'Export log (CSV)'}
               </button>
               <p className="tiny faint">
-                One row per set, with volume, estimated 1RM and rest time already worked out.
+                Every session in one file, one row per set. Individual sessions are offered when
+                you finish them; this is the whole history.
               </p>
 
               <Row

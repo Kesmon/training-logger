@@ -243,6 +243,50 @@ Pull:
     expect(parseRoutineText('- Face Pull').days[0]!.items[0]!.plannedSets).toBe(3)
   })
 
+  it('reads a blockquote as the day’s note, not an exercise', () => {
+    const routine = parseRoutineText(`# Block 2
+
+## Day A
+> If you're still sore, cut the RDLs.
+- Squat 5x5
+- Romanian Deadlift 3x8`)
+
+    expect(routine.days[0]!.note).toBe("If you're still sore, cut the RDLs.")
+    // The trap this closes: the sentence used to become an exercise.
+    expect(routine.days[0]!.items.map((i) => i.exercise)).toEqual([
+      'Squat',
+      'Romanian Deadlift',
+    ])
+  })
+
+  it('joins consecutive blockquote lines', () => {
+    const routine = parseRoutineText(`## Day A
+> Warm up thoroughly.
+> Stop if the knee complains.
+- Squat 5x5`)
+    expect(routine.days[0]!.note).toBe('Warm up thoroughly. Stop if the knee complains.')
+  })
+
+  it('treats a blockquote before any day as guidance for the block', () => {
+    const routine = parseRoutineText(`# Block 2
+> Deload week. Everything at 70%.
+
+## Day A
+- Squat 5x5`)
+    expect(routine.note).toBe('Deload week. Everything at 70%.')
+    expect(routine.days[0]!.note).toBeUndefined()
+  })
+
+  it('does not mistake a blockquote for a day heading or an exercise', () => {
+    // Contains a colon and a full stop, both of which route elsewhere.
+    const routine = parseRoutineText(`## Day A
+> Note: keep it light.
+- Squat 5x5`)
+    expect(routine.days).toHaveLength(1)
+    expect(routine.days[0]!.name).toBe('Day A')
+    expect(routine.days[0]!.items).toHaveLength(1)
+  })
+
   it('drops headings with nothing under them', () => {
     const routine = parseRoutineText(`## Day A
 - Squat 5x5

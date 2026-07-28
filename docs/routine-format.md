@@ -236,7 +236,7 @@ first and the question disappears:
 - Squat 5x5 @ 100kg
 ```
 
-### 3. Free-floating prose — *caught*
+### 3. Free-floating prose — *caught, but quote it instead*
 
 Every non-heading line is read as an exercise. This:
 
@@ -248,13 +248,11 @@ Deload every fourth week.
 ```
 
 used to create an exercise called "Deload every fourth week." It now has no set
-count and no library match, so it is flagged and skipped. Still cleaner to put
-standing notes where they belong:
+count and no library match, so it is flagged and skipped.
 
-```markdown
-## Day A (deload every 4th week)
-- Squat 5x5 — deload every 4th week
-```
+Better still, **quote it** — see [Notes for a whole day](#notes-for-a-whole-day)
+below. A `>` line is a note rather than a skipped mistake, and it shows up in
+the gym.
 
 ### 4. `###` does not create a sub-day
 
@@ -274,6 +272,32 @@ usually what you want — a day is a session. If you want them separate, make th
 both `##`.
 
 ---
+
+## Notes for a whole day
+
+A line starting with `>` is an instruction, not an exercise:
+
+```markdown
+# Block 2
+
+> Deload week. Everything at 70%.
+
+## Day A
+> If you're still sore, cut the RDLs.
+- Barbell Back Squat 5x5
+- Romanian Deadlift 3x8
+```
+
+A quote **under a day heading** belongs to that day and is shown at the top of
+the session while you train. A quote **before any day heading** is guidance for
+the whole routine.
+
+Consecutive quoted lines join into one note, so you can wrap however you like.
+
+This is the place for anything that applies to the session rather than to one
+exercise — *"stop if the knee complains"*, *"superset the last two"*, *"deload
+week"*. Written as plain prose it would be skipped as an unreadable line; quoted,
+it ends up where it is useful.
 
 ## Re-importing a routine
 
