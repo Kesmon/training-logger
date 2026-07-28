@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import type { SetEntry, SetType } from '../db/schema'
+import type { Exercise, SetEntry, SetType } from '../db/schema'
+import { setCategory } from './format'
 import {
   detectPrs,
   estimate1rm,
   estimate1rmFromSet,
+  hardSetsPerMuscle,
   percentOf1rm,
   restIntervals,
   rpeAdjusted1rm,
@@ -46,6 +48,55 @@ describe('volumeLoad', () => {
   it('is zero when reps or weight are missing', () => {
     expect(volumeLoad(makeSet({ weightKg: 100 }))).toBe(0)
     expect(volumeLoad(makeSet({ reps: 5 }))).toBe(0)
+  })
+})
+
+describe('set categories', () => {
+  it('treats intensity techniques as continuations, not extra sets', () => {
+    expect(setCategory('warmup')).toBe('preparatory')
+    for (const t of ['working', 'top', 'backoff', 'amrap', 'failure'] as SetType[]) {
+      expect(setCategory(t), t).toBe('working')
+    }
+    for (const t of ['drop', 'myorep', 'restpause'] as SetType[]) {
+      expect(setCategory(t), t).toBe('continuation')
+    }
+  })
+
+  it('does not let a drop set inflate a weekly set cap', () => {
+    // Two prescribed rowing sets, a drop on the second. That is two hard sets.
+    const exercise = {
+      id: 'row',
+      name: 'Chest-supported row',
+      primaryMuscles: ['Upper back'],
+      secondaryMuscles: [],
+    } as unknown as Exercise
+
+    const sets = [
+      makeSet({ exerciseId: 'row', setType: 'working', weightKg: 25, reps: 8 }),
+      makeSet({ exerciseId: 'row', setType: 'working', weightKg: 25, reps: 8 }),
+      makeSet({ exerciseId: 'row', setType: 'drop', weightKg: 15, reps: 8 }),
+    ]
+
+    expect(hardSetsPerMuscle(sets, new Map([['row', exercise]]))).toEqual({ 'Upper back': 2 })
+  })
+
+  it('still counts the load a continuation moved', () => {
+    // The reps in a drop set are real work, even though it is not a new set.
+    expect(volumeLoad(makeSet({ setType: 'drop', weightKg: 15, reps: 8 }))).toBe(120)
+    expect(volumeLoad(makeSet({ setType: 'myorep', weightKg: 20, reps: 5 }))).toBe(100)
+    // Warm-ups remain excluded from tonnage.
+    expect(volumeLoad(makeSet({ setType: 'warmup', weightKg: 60, reps: 5 }))).toBe(0)
+  })
+
+  it('does not award records to continuations', () => {
+    const history = [makeSet({ weightKg: 100, reps: 5 }), makeSet({ weightKg: 110, reps: 3 })]
+    const drop = makeSet({ weightKg: 200, reps: 10, setType: 'drop' })
+    expect(detectPrs(drop, history).any).toBe(false)
+  })
+
+  it('does not estimate a 1RM from a post-fatigue continuation', () => {
+    expect(estimate1rmFromSet(makeSet({ setType: 'drop', weightKg: 60, reps: 12 }))).toBeUndefined()
+    expect(estimate1rmFromSet(makeSet({ setType: 'failure', weightKg: 60, reps: 12 }))).toBeDefined()
   })
 })
 

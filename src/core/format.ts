@@ -115,8 +115,42 @@ const SET_TYPE_SHORT: Record<SetType, string> = {
 export const setTypeLabel = (t: SetType): string => SET_TYPE_LABELS[t]
 export const setTypeShort = (t: SetType): string => SET_TYPE_SHORT[t]
 
-/** Warm-ups do not count toward volume, hard sets, or personal records. */
-export const countsAsWorkingSet = (t: SetType): boolean => t !== 'warmup'
+/**
+ * Sets fall into three kinds, not two.
+ *
+ * A drop set, myo-rep or rest-pause is a *continuation* of the set it extends —
+ * it shares that set's rest period, which is what makes it an intensity
+ * technique rather than extra volume. Counting it as another set inflates every
+ * weekly set total: two rowing sets with a drop on the second would read as
+ * three, and a hard cap of two would be exceeded without anyone seeing it.
+ *
+ * The load still moved, though, so continuations do count toward tonnage.
+ */
+export type SetCategory = 'preparatory' | 'working' | 'continuation'
+
+const SET_CATEGORIES: Record<SetType, SetCategory> = {
+  warmup: 'preparatory',
+  working: 'working',
+  top: 'working',
+  backoff: 'working',
+  amrap: 'working',
+  // A set genuinely taken to failure is a set, not an extension of one.
+  failure: 'working',
+  drop: 'continuation',
+  myorep: 'continuation',
+  restpause: 'continuation',
+}
+
+export const setCategory = (t: SetType): SetCategory => SET_CATEGORIES[t]
+
+/**
+ * Whether this is a discrete hard set — the unit weekly volume caps, set
+ * positions and personal records are counted in.
+ */
+export const countsAsWorkingSet = (t: SetType): boolean => setCategory(t) === 'working'
+
+/** Whether real external load was moved. True for continuations, not warm-ups. */
+export const movedLoad = (t: SetType): boolean => setCategory(t) !== 'preparatory'
 
 export const EQUIPMENT: Equipment[] = [
   'barbell',

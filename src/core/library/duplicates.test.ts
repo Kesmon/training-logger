@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { addSet, createExercise, setSetStatus, startSession, updateSet } from '../../db/queries'
 import { db, type Exercise } from '../../db/schema'
 import { mergeExercises } from '../../db/queries'
-import { findLibraryIssues, looksUnparsed } from './duplicates'
+import { findLibraryIssues, looksUnparsed, matchCanonical } from './duplicates'
 
 let n = 0
 const ex = (name: string, over: Partial<Exercise> = {}): Exercise => ({
@@ -53,6 +53,13 @@ describe('findLibraryIssues', () => {
     expect(merges[0]!.reason).toBe('prefix')
   })
 
+  it('sees through a missing space', () => {
+    // Token overlap scores these zero — they share no token at all.
+    const { merges } = findLibraryIssues([ex('facepull'), ex('Face pull')])
+    expect(merges).toHaveLength(1)
+    expect(merges[0]!.reason).toBe('identical')
+  })
+
   it('collapses a three-way pile-up into one group', () => {
     const a = ex('Chest row')
     const b = ex('chest row')
@@ -97,6 +104,51 @@ describe('findLibraryIssues', () => {
     const issues = findLibraryIssues([ex('Squat'), ex('Bench Press'), ex('Deadlift')])
     expect(issues.merges).toEqual([])
     expect(issues.renames).toEqual([])
+  })
+})
+
+describe('canonical names', () => {
+  const NAMES = ['Chest-supported row', 'Face pull', 'Plank', 'Barbell Back Squat']
+
+  it('recognises the programme spelling of a name she has', () => {
+    expect(matchCanonical('chest row', NAMES)).toBe('Chest-supported row')
+    expect(matchCanonical('Face pull', NAMES)).toBe('Face pull')
+    expect(matchCanonical('facepull', NAMES)).toBe('Face pull')
+  })
+
+  it('does not force unrelated lifts onto the list', () => {
+    expect(matchCanonical('Deadlift', NAMES)).toBeUndefined()
+    expect(matchCanonical('Leg Extension', NAMES)).toBeUndefined()
+  })
+
+  it('merges onto the spelling Block 2 will use, not the one she has', () => {
+    // Merging onto "chest row" fixes today and re-splits the library the moment
+    // a routine written as "Chest-supported row" is imported.
+    const junk = ex('chest row   x6 @')
+    const hers = ex('chest row')
+    const { merges } = findLibraryIssues([junk, hers], new Map(), NAMES)
+
+    expect(merges).toHaveLength(1)
+    expect(merges[0]!.canonical.id).toBe(hers.id)
+    expect(merges[0]!.suggestedName).toBe('Chest-supported row')
+  })
+
+  it('keeps the existing name when the programme has no opinion', () => {
+    const { merges } = findLibraryIssues([ex('Cable Crunch'), ex('cable crunch')], new Map(), NAMES)
+    expect(merges[0]!.suggestedName).toBe('Cable Crunch')
+  })
+
+  it('suggests the programme spelling even with nothing to merge', () => {
+    const { renames } = findLibraryIssues([ex('chest row')], new Map(), NAMES)
+    expect(renames).toEqual([
+      expect.objectContaining({ suggested: 'Chest-supported row' }),
+    ])
+  })
+
+  it('says nothing when a name already matches the programme', () => {
+    const { merges, renames } = findLibraryIssues([ex('Face pull')], new Map(), NAMES)
+    expect(merges).toEqual([])
+    expect(renames).toEqual([])
   })
 })
 

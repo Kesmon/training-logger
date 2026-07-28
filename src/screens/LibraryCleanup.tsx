@@ -2,6 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { useState } from 'react'
 import { Empty, Screen } from '../components/Screen'
 import { equipmentLabel } from '../core/format'
+import { CANONICAL_EXERCISE_NAMES } from '../core/library/canonicalNames'
 import { findLibraryIssues } from '../core/library/duplicates'
 import { mergeExercises, updateExercise } from '../db/queries'
 import { db } from '../db/schema'
@@ -16,13 +17,19 @@ export function LibraryCleanup() {
   const [done, setDone] = useState<string[]>([])
   const [busy, setBusy] = useState<string | null>(null)
 
+  /** Edited target names, keyed by the surviving exercise's id. */
+  const [targets, setTargets] = useState<Map<string, string>>(new Map())
+
   const data = useLiveQuery(async () => {
     const exercises = await db.exercises.toArray()
     const usage = new Map<string, number>()
     for (const e of exercises) {
       usage.set(e.id, await db.setEntries.where('exerciseId').equals(e.id).count())
     }
-    return { issues: findLibraryIssues(exercises, usage), usage }
+    return {
+      issues: findLibraryIssues(exercises, usage, CANONICAL_EXERCISE_NAMES),
+      usage,
+    }
   }, [])
 
   if (!data) return <Screen title="Clean up library" onBack children={null} />
@@ -31,11 +38,24 @@ export function LibraryCleanup() {
   const sets = (n: number) => `${n} set${n === 1 ? '' : 's'}`
   const nothingToDo = issues.merges.length === 0 && issues.renames.length === 0
 
-  async function merge(fromId: string, intoId: string, label: string) {
+  async function merge(fromId: string, intoId: string, finalName: string) {
     setBusy(fromId)
     try {
       const moved = await mergeExercises(fromId, intoId)
-      setDone((d) => [...d, `${label} — ${moved} set${moved === 1 ? '' : 's'} moved`])
+      // Renaming after the merge so the moved sets pick up the final name too.
+      const survivor = await db.exercises.get(intoId)
+      const name = finalName.trim()
+      if (survivor && name && name !== survivor.name) {
+        await updateExercise(intoId, { name })
+        const sets = await db.setEntries.where('exerciseId').equals(intoId).toArray()
+        await Promise.all(
+          sets.map((s) => db.setEntries.update(s.id, { exerciseName: name })),
+        )
+      }
+      setDone((d) => [
+        ...d,
+        `${name || survivor?.name} — ${moved} set${moved === 1 ? '' : 's'} moved`,
+      ])
     } finally {
       setBusy(null)
     }
@@ -83,15 +103,22 @@ export function LibraryCleanup() {
             <div className="stack">
               {issues.merges.map((candidate) => (
                 <div className="card" key={candidate.canonical.id}>
-                  <div className="row" style={{ marginBottom: 8 }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div className="tiny faint">Keep</div>
-                      <div style={{ fontWeight: 620 }}>{candidate.canonical.name}</div>
-                      <div className="tiny faint">
-                        {equipmentLabel(candidate.canonical.equipment)} ·{' '}
-                        {sets(usage.get(candidate.canonical.id) ?? 0)}
-                      </div>
-                    </div>
+                  <div className="tiny faint">Keep, named</div>
+                  <input
+                    value={targets.get(candidate.canonical.id) ?? candidate.suggestedName}
+                    autoCapitalize="words"
+                    autoCorrect="off"
+                    onChange={(e) =>
+                      setTargets((prev) =>
+                        new Map(prev).set(candidate.canonical.id, e.target.value),
+                      )
+                    }
+                  />
+                  <div className="tiny faint" style={{ margin: '4px 0 10px' }}>
+                    {equipmentLabel(candidate.canonical.equipment)} ·{' '}
+                    {sets(usage.get(candidate.canonical.id) ?? 0)}
+                    {candidate.suggestedName !== candidate.canonical.name &&
+                      ` · currently “${candidate.canonical.name}”`}
                   </div>
 
                   {candidate.duplicates.map((dup) => (
@@ -112,7 +139,11 @@ export function LibraryCleanup() {
                         className="btn btn--sm btn--primary"
                         disabled={busy !== null}
                         onClick={() =>
-                          void merge(dup.id, candidate.canonical.id, candidate.canonical.name)
+                          void merge(
+                            dup.id,
+                            candidate.canonical.id,
+                            targets.get(candidate.canonical.id) ?? candidate.suggestedName,
+                          )
                         }
                       >
                         {busy === dup.id ? '…' : 'Merge'}

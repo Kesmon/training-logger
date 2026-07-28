@@ -1,5 +1,5 @@
 import type { E1rmFormula, Exercise, SetEntry } from '../db/schema'
-import { countsAsWorkingSet } from './format'
+import { countsAsWorkingSet, movedLoad } from './format'
 
 /**
  * Pure derived values. Nothing here reads or writes the database, which is what
@@ -12,7 +12,9 @@ import { countsAsWorkingSet } from './format'
  * negative external load.
  */
 export function volumeLoad(set: SetEntry): number {
-  if (!countsAsWorkingSet(set.setType)) return 0
+  // Continuations count here even though they are not separate sets: the reps
+  // in a drop set are real work. Only warm-ups are excluded.
+  if (!movedLoad(set.setType)) return 0
   const w = Math.max(0, set.weightKg ?? 0)
   return w * (set.reps ?? 0)
 }

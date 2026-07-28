@@ -21,6 +21,16 @@ function tokens(s: string): Set<string> {
   return new Set(normalise(s).split(' ').filter(Boolean))
 }
 
+/**
+ * Normalised with the spaces taken out, so `facepull` and `Face pull` are seen
+ * as the same movement. Token overlap cannot do this — it scores them zero,
+ * having no token in common — and `facepull` is one of the names the old
+ * importer actually left behind.
+ */
+function squash(s: string): string {
+  return normalise(s).replace(/ /g, '')
+}
+
 function similarity(a: string, b: string): number {
   const ta = tokens(a)
   const tb = tokens(b)
@@ -61,11 +71,41 @@ export interface MergeCandidate {
   /** Entries to fold into it, with their logged set counts. */
   duplicates: Exercise[]
   reason: MergeReason
+  /**
+   * What the surviving entry should end up called. Usually its own name, but
+   * the programme's spelling when one matches — merging onto `chest row` fixes
+   * today and re-splits the moment a routine written as `Chest-supported row`
+   * is imported.
+   */
+  suggestedName: string
 }
 
 export interface RenameSuggestion {
   exercise: Exercise
   suggested: string
+}
+
+/**
+ * The programme's spelling for a name, if one is close enough to be the same
+ * movement. Exact match on the normalised form first, then token overlap.
+ */
+export function matchCanonical(name: string, canonical: string[]): string | undefined {
+  const n = normalise(name)
+  if (!n) return undefined
+
+  const exact = canonical.find((c) => normalise(c) === n || squash(c) === squash(name))
+  if (exact) return exact
+
+  let best: string | undefined
+  let bestScore = 0
+  for (const c of canonical) {
+    const score = similarity(name, c)
+    if (score > bestScore) {
+      bestScore = score
+      best = c
+    }
+  }
+  return bestScore >= 0.55 ? best : undefined
 }
 
 export interface LibraryIssues {
@@ -77,7 +117,7 @@ function relation(a: string, b: string): MergeReason | null {
   const na = normalise(a)
   const nb = normalise(b)
   if (!na || !nb) return null
-  if (na === nb) return 'identical'
+  if (na === nb || squash(a) === squash(b)) return 'identical'
   // "plank" against "plank 30s" — one is the whole of the other's start.
   if (na.startsWith(`${nb} `) || nb.startsWith(`${na} `)) return 'prefix'
   // Lower than the import threshold: here the user reviews every merge, so a
@@ -93,6 +133,7 @@ function relation(a: string, b: string): MergeReason | null {
 export function findLibraryIssues(
   exercises: Exercise[],
   usage: Map<string, number> = new Map(),
+  canonicalNames: string[] = [],
 ): LibraryIssues {
   // Union-find, so a three-way pile-up collapses into one group.
   const parent = new Map<string, string>()
@@ -149,18 +190,27 @@ export function findLibraryIssues(
     })
     const [canonical, ...duplicates] = sorted
     members.forEach((m) => grouped.add(m.id))
+
+    // Any member may be the one that recognisably matches the programme's
+    // spelling, so try the cleanest first and fall back through the group.
+    const fromProgramme = sorted
+      .map((m) => matchCanonical(m.name, canonicalNames))
+      .find(Boolean)
+
     merges.push({
       canonical: canonical!,
       duplicates,
       reason: reasons.get(root) ?? 'similar',
+      suggestedName: fromProgramme ?? canonical!.name,
     })
   }
 
-  // Junk names with nothing to merge into can at least be tidied in place.
+  // Entries with nothing to merge into can still be tidied: either onto the
+  // programme's spelling, or by shedding an unparsed fragment.
   const renames: RenameSuggestion[] = []
   for (const e of exercises) {
     if (grouped.has(e.id)) continue
-    const suggested = cleanExerciseName(e.name)
+    const suggested = matchCanonical(e.name, canonicalNames) ?? cleanExerciseName(e.name)
     if (suggested && suggested !== e.name) renames.push({ exercise: e, suggested })
   }
 
