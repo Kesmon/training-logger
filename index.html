@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- viewport-fit=cover is what lets env(safe-area-inset-*) return non-zero
+         on notched iPhones; without it the bottom nav sits under the home bar. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1"
+    />
+    <meta name="theme-color" content="#0b0d10" />
+    <meta name="description" content="Offline strength training log — sets, weights, effort, PRs." />
+
+    <!-- iOS home-screen install. Safari reads these, not the web manifest. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Training" />
+    <link rel="apple-touch-icon" href="./icons/apple-touch-icon-180.png" />
+    <link rel="icon" type="image/svg+xml" href="./icons/favicon.svg" />
+
+    <title>Training Logger</title>
+
+    <!-- Applies the theme before first paint. The real preference lives in
+         IndexedDB, which is async, so it is mirrored to localStorage purely so
+         this can run synchronously and avoid a flash of the wrong theme. -->
+    <script>
+      ;(function () {
+        try {
+          var saved = localStorage.getItem('tl-theme') || 'system'
+          var resolved =
+            saved === 'system'
+              ? window.matchMedia('(prefers-color-scheme: light)').matches
+                ? 'light'
+                : 'dark'
+              : saved
+          document.documentElement.setAttribute('data-theme', resolved)
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'dark')
+        }
+      })()
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
