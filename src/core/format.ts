@@ -44,6 +44,36 @@ export function fmtDayName(date: string): string {
   return new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: 'long' })
 }
 
+/**
+ * What the routine asked for, as one line to show above the sets.
+ *
+ * Prefers the coach's own words when there are any — `2x10 per leg — 3 RIR` is
+ * more use in the gym than a tidied restatement of it, and repeating both reads
+ * as noise. Falls back to the structured prescription otherwise.
+ */
+export function fmtPrescription(set: {
+  plannedSets?: number
+  plannedRepsMin?: number
+  plannedRepsMax?: number
+  plannedDurationSec?: number
+  perSide?: boolean
+  plannedNote?: string
+}): string | undefined {
+  if (set.plannedNote) return set.plannedNote
+  if (set.plannedSets === undefined) return undefined
+
+  const reps =
+    set.plannedRepsMin === undefined
+      ? undefined
+      : set.plannedRepsMax !== undefined && set.plannedRepsMax !== set.plannedRepsMin
+        ? `${set.plannedRepsMin}–${set.plannedRepsMax}`
+        : String(set.plannedRepsMin)
+
+  const target = set.plannedDurationSec !== undefined ? `${set.plannedDurationSec}s` : reps
+  const head = target ? `${set.plannedSets} × ${target}` : `${set.plannedSets} sets`
+  return set.perSide ? `${head} per side` : head
+}
+
 /** Monday of the week containing `date`, as YYYY-MM-DD. Buckets weekly charts. */
 export function weekStart(date: string): string {
   const [y, m, d] = date.split('-').map(Number)

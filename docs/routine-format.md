@@ -36,23 +36,29 @@ or worse (see [Traps](#traps) below).
 
 ---
 
-## What the app keeps, and what it ignores
+## What the app keeps
 
-A routine carries **structure only** — which exercises, in what order, and how
-many sets. It never prescribes weights or reps.
+A routine is a **prescription, not a script**. It lays out the rows and records
+what was asked for; you still type what actually happened.
 
 | You write | The app stores |
 |---|---|
-| `Barbell Back Squat 5x3` | exercise **Barbell Back Squat**, **5** blank sets |
-| the rest of the line | a **note**, shown while you lift, never enforced |
+| `Barbell Back Squat 5x3` | exercise **Barbell Back Squat**, **5** blank rows |
+| the `3` | prescribed reps |
+| the rest of the line | the note, shown above the sets while you lift |
 
-So `Squat 5x3 @RPE8 — top set then backoff` gives you five empty rows and the
-text `5x3 @RPE8 — top set then backoff` displayed above them as a reminder. You
-still type the actual weight and reps as you go, which is the point: the log
-records what you *did*, not what you planned.
+So `Squat 5x3 @RPE8 — top set then backoff` gives five empty rows with
+`5x3 @RPE8 — top set then backoff` shown above them. Nothing is pre-filled and
+nothing is enforced — the log records what you *did*.
+
+Both halves reach the export. Every logged set carries `planned_sets`,
+`planned_reps_min`, `planned_reps_max` and `planned_note` next to the weight and
+reps you actually entered, so a coach can see a missed target, an added set, or
+a set that was never reached — rather than having to ask.
 
 If you leave the number off entirely (`Face Pull`), you get **3 sets** by
-default. Add or remove rows in the app whenever you like.
+default. Add or remove rows in the app whenever you like; a row beyond the
+prescription is flagged as an extra rather than being mistaken for a normal one.
 
 ---
 
@@ -114,30 +120,78 @@ exercise library.
 
 ## Ways to write the sets
 
-All of these are understood:
+All of these are understood. **The first number is always the set count**; what
+the second number means depends on the unit after it.
 
-| You write | Sets | Note kept |
-|---|---|---|
-| `Squat 5x3` | 5 | `5x3` |
-| `Squat 5 x 3` | 5 | `5 x 3` |
-| `Squat 5×3` | 5 | `5×3` |
-| `Squat 5*3` | 5 | `5*3` |
-| `Squat 5x3+` | 5 | `5x3+` |
-| `Squat 3x8-10` | 3 | `3x8-10` |
-| `Lat Pulldown 4 sets of 12` | 4 | `4 sets of 12` |
-| `Knebøy 4 sett` | 4 | `4 sett` |
-| `Plank 3x45s` | 3 | `3x45s` |
-| `Farmer's Walk 2x20m` | 2 | `2x20m` |
-| `Face Pull` | 3 (default) | — |
+| You write | Sets | Then | Meaning |
+|---|---|---|---|
+| `Squat 5x3` | 5 | 3 reps | |
+| `Squat 5 x 3` · `5×3` · `5*3` | 5 | 3 reps | spacing and symbol are free |
+| `Squat 5x3+` | 5 | 3 reps | the `+` rides along in the note |
+| `Squat 3x8-10` | 3 | 8–10 reps | a **range** |
+| `Plank 3x30s` | 3 | 30 seconds | a **hold**, not reps |
+| `Plank 3x2min` | 3 | 120 seconds | |
+| `Farmer's Walk 2x20m` | 2 | 20 metres | a **distance**, not reps |
+| `Split Squat 2x10 per leg` | 2 | 10 reps **per side** | |
+| `Lat Pulldown 4 sets of 12` | 4 | 12 reps | |
+| `Knebøy 4 sett` | 4 | — | Norwegian |
+| `Face Pull` | 3 (default) | — | |
 
-Anything after the numbers is preserved as the note, so prescriptions ride along
-untouched:
+Anything after the numbers is preserved as the note and shown above the sets, so
+prescriptions ride along untouched:
 
 ```markdown
 - Barbell Back Squat 5x3 @RPE8, last set AMRAP
 - Bench Press 3x10 RIR2, 3-1-1-0 tempo
 - Deadlift 1x5 @85%, then 3x5 @75%
 ```
+
+### Rep ranges
+
+`3x8-10` records a minimum of 8 and a maximum of 10. A fixed `3x10` records
+10 and 10, so a range and a fixed target are never ambiguous.
+
+**A dash before a note is not a range.** `2x6 — 3 RIR` means six reps with a
+note, not a range of six down to three — a dash only opens a range when the
+number after it is larger. Both of these do the right thing:
+
+```markdown
+- Romanian Deadlift 3x8-10          ← a range, 8 to 10
+- Chest-supported row 2x6 — 3 RIR   ← six reps, note "3 RIR"
+```
+
+### Timed holds
+
+A trailing `s`, `sec` or `min` makes it a duration rather than reps:
+
+```markdown
+- Plank 3x30s
+- Dead hang 3x45 sec
+- Farmer's Walk 2x1min
+```
+
+This also **shapes the exercise**: it is created with a seconds field instead of
+weight and reps, so there is somewhere to record what you actually held. The
+target and the achieved time stay separate — a 30-second target held for 22
+seconds reads as exactly that, which is information rather than a failure.
+
+### One side at a time
+
+`per leg`, `per side`, `each side`, `/side` and `per arm` all mark an exercise
+as unilateral:
+
+```markdown
+- Bulgarian Split Squat 2x10 per leg
+- Pallof press 2x12 each side
+- Single-Leg Glute Bridge 3x10/side
+```
+
+`2x10 per leg` lays out **two rows, not four**. Each row is one set performed on
+both legs: reps is the count *per limb*, volume counts both, and the row counts
+as one hard set to each leg. The set row shows `/side` and the exercise carries a
+**per side** badge, so which convention you are looking at is never a guess.
+
+You can also toggle this by hand in Library → the exercise → *One side at a time*.
 
 ---
 
@@ -221,6 +275,16 @@ both `##`.
 
 ---
 
+## Re-importing a routine
+
+Importing a routine with a name you have used before creates a **new version**
+rather than a duplicate. The old version stays in the database so sessions
+already logged against it still resolve, but drops out of the routine list.
+
+Every session records which version it was performed under, so revising a
+programme mid-block never rewrites what an earlier session was asked to do. You
+do not need to put version numbers in the file name.
+
 ## Naming exercises
 
 Names are matched against your library case-insensitively, so `barbell back
@@ -299,11 +363,34 @@ Norwegian names are fine (`Knebøy`, `Markløft`, `Benkpress`); just be consiste
 ## Before you import
 
 - The first number on each line is the **set count**, not a weight
-- Load and rep targets go **after** the scheme, where they become notes
-- No stray sentences — every non-heading line becomes an exercise
+- Add `s` for a hold, `m` for a distance, `per leg` for unilateral work
+- Load goes **after** the scheme, where it becomes a note
+- No stray sentences — a line the app can't read is skipped, not guessed at
 - Exercise names spelled the same way as last time
-- Check the preview: it shows every day and exercise, and flags which exercises
-  are new, before anything is written
+- Check the preview: it shows every day and exercise, flags which are new, and
+  lists anything it couldn't read, before anything is written
 
 Nothing is saved until you tap **Import routine**, so a bad parse costs you
 nothing — go back and edit the file.
+
+---
+
+## What ends up in the export
+
+For anyone reading the logged data rather than writing the routine. Each logged
+set carries its own prescription:
+
+| Column | From |
+|---|---|
+| `planned_sets` | the first number |
+| `planned_reps_min` / `planned_reps_max` | the second number, or the range |
+| `planned_duration_sec` | `30s`, `2min` |
+| `planned_note` | the rest of the line |
+| `per_side` | `per leg`, `each side` |
+| `routine_name` / `routine_version` | which revision was performed |
+| `set_status` | `completed` · `skipped` · `not_logged` |
+| `is_extra` | a working set beyond `planned_sets` |
+
+`skipped` means you tapped **Skip set** — a decision. `not_logged` means the row
+was never touched. They are different facts and the app will not guess between
+them, so tap Skip when you mean it.

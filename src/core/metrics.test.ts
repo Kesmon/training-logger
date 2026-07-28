@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Exercise, SetEntry, SetType } from '../db/schema'
-import { setCategory } from './format'
+import { fmtPrescription, setCategory } from './format'
 import {
   detectPrs,
   estimate1rm,
@@ -54,6 +54,33 @@ describe('volumeLoad', () => {
   it('is zero when reps or weight are missing', () => {
     expect(volumeLoad(makeSet({ weightKg: 100 }))).toBe(0)
     expect(volumeLoad(makeSet({ reps: 5 }))).toBe(0)
+  })
+})
+
+describe('fmtPrescription', () => {
+  it('prefers the coach’s own words', () => {
+    // More use in the gym than a tidied restatement, and showing both is noise.
+    expect(
+      fmtPrescription({ plannedSets: 2, plannedRepsMin: 6, plannedNote: '2x6 — 3 RIR' }),
+    ).toBe('2x6 — 3 RIR')
+  })
+
+  it('falls back to the structured prescription', () => {
+    expect(fmtPrescription({ plannedSets: 3, plannedRepsMin: 10, plannedRepsMax: 10 })).toBe(
+      '3 × 10',
+    )
+    expect(fmtPrescription({ plannedSets: 3, plannedRepsMin: 8, plannedRepsMax: 10 })).toBe(
+      '3 × 8–10',
+    )
+    expect(fmtPrescription({ plannedSets: 3, plannedDurationSec: 30 })).toBe('3 × 30s')
+    expect(
+      fmtPrescription({ plannedSets: 2, plannedRepsMin: 10, plannedRepsMax: 10, perSide: true }),
+    ).toBe('2 × 10 per side')
+    expect(fmtPrescription({ plannedSets: 4 })).toBe('4 sets')
+  })
+
+  it('says nothing when nothing was prescribed', () => {
+    expect(fmtPrescription({})).toBeUndefined()
   })
 })
 

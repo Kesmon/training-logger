@@ -9,6 +9,7 @@ import { Sheet } from '../components/Sheet'
 import {
   fmtDate,
   fmtDuration,
+  fmtPrescription,
   fmtEffort,
   fmtWeight,
   kgToDisplay,
@@ -170,6 +171,13 @@ export function SessionScreen({ id }: { id: string }) {
                     <IconTrash />
                   </button>
                 </div>
+
+                {/* What the coach asked for. Its whole purpose is being on the
+                    phone in the gym rather than in a document she is not
+                    holding, so it sits above the sets rather than inside a row. */}
+                {fmtPrescription(exSets[0] ?? {}) && (
+                  <div className="exblock__rx">{fmtPrescription(exSets[0] ?? {})}</div>
+                )}
 
                 {previous.length > 0 && (
                   <div className="exblock__hint">

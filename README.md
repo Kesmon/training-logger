@@ -73,8 +73,12 @@ set count out of the exercise cell itself if you wrote `Squat 5x5`.
 
 `#` names the routine, `##` a day, and each bullet an exercise. The **first**
 number is the set count — `5x3` means five sets — and the rest of the line is
-kept as a note. A bare list with no headings becomes a one-day routine, and
-`Day A:` works as a heading too.
+kept as a note shown above the sets while you lift. A bare list with no headings
+becomes a one-day routine, and `Day A:` works as a heading too.
+
+What the second number means follows the unit after it: `3x8-10` is a rep range,
+`3x30s` a thirty-second hold, `2x20m` a distance, and `2x10 per leg` marks the
+exercise unilateral — two rows, reps counted per limb, volume counting both.
 
 **→ [Full routine-writing guide](docs/routine-format.md)** — every accepted
 notation, the four ways to get a surprising result, and worked examples you can

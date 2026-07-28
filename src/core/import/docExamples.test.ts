@@ -118,20 +118,74 @@ describe('the guide is accurate', () => {
     const expected: [string, number][] = [
       ['Squat 5x3', 5],
       ['Squat 5 x 3', 5],
-      ['Squat 5×3', 5],
-      ['Squat 5*3', 5],
       ['Squat 5x3+', 5],
       ['Squat 3x8-10', 3],
+      ['Plank 3x30s', 3],
+      ['Plank 3x2min', 3],
+      ["Farmer's Walk 2x20m", 2],
+      ['Split Squat 2x10 per leg', 2],
       ['Lat Pulldown 4 sets of 12', 4],
       ['Knebøy 4 sett', 4],
-      ['Plank 3x45s', 3],
-      ["Farmer's Walk 2x20m", 2],
       ['Face Pull', 3],
     ]
     for (const [line, sets] of expected) {
       const item = parseRoutineText(`- ${line}`).days[0]!.items[0]!
       expect(item.plannedSets, `"${line}"`).toBe(sets)
       // The table claims every row in it appears verbatim in the guide.
+      expect(DOC, `"${line}" missing from the guide`).toContain(line)
+    }
+  })
+
+  it('the reference table is right about what the second number means', () => {
+    const item = (line: string) => parseRoutineText(`- ${line}`).days[0]!.items[0]!
+
+    // Reps, plain and as a range.
+    expect(item('Squat 5x3')).toMatchObject({ plannedRepsMin: 3, plannedRepsMax: 3 })
+    expect(item('Squat 3x8-10')).toMatchObject({ plannedRepsMin: 8, plannedRepsMax: 10 })
+
+    // A hold, not reps.
+    expect(item('Plank 3x30s')).toMatchObject({ plannedDurationSec: 30 })
+    expect(item('Plank 3x30s').plannedRepsMin).toBeUndefined()
+    expect(item('Plank 3x2min')).toMatchObject({ plannedDurationSec: 120 })
+
+    // A distance, not reps.
+    expect(item("Farmer's Walk 2x20m").plannedRepsMin).toBeUndefined()
+
+    // Per side.
+    expect(item('Split Squat 2x10 per leg')).toMatchObject({
+      plannedSets: 2,
+      plannedRepsMin: 10,
+      unilateral: true,
+    })
+  })
+
+  it('the dash-is-not-a-range examples behave as the guide says', () => {
+    const item = (line: string) => parseRoutineText(`- ${line}`).days[0]!.items[0]!
+
+    expect(item('Romanian Deadlift 3x8-10')).toMatchObject({
+      plannedRepsMin: 8,
+      plannedRepsMax: 10,
+    })
+    // Six reps with a note, not a range of six down to three.
+    expect(item('Chest-supported row 2x6 — 3 RIR')).toMatchObject({
+      exercise: 'Chest-supported row',
+      plannedSets: 2,
+      plannedRepsMin: 6,
+      plannedRepsMax: 6,
+    })
+
+    for (const line of ['Romanian Deadlift 3x8-10', 'Chest-supported row 2x6 — 3 RIR']) {
+      expect(DOC, `"${line}" missing from the guide`).toContain(line)
+    }
+  })
+
+  it('every unilateral spelling the guide lists is recognised', () => {
+    for (const line of [
+      'Bulgarian Split Squat 2x10 per leg',
+      'Pallof press 2x12 each side',
+      'Single-Leg Glute Bridge 3x10/side',
+    ]) {
+      expect(parseRoutineText(`- ${line}`).days[0]!.items[0]!.unilateral, line).toBe(true)
       expect(DOC, `"${line}" missing from the guide`).toContain(line)
     }
   })
