@@ -41,6 +41,8 @@ describe('extractSets', () => {
     expect(extractSets('Barbell Back Squat 5x3')).toEqual({
       name: 'Barbell Back Squat',
       sets: 5,
+      repsMin: 3,
+      repsMax: 3,
       note: '5x3',
     })
   })
@@ -53,8 +55,43 @@ describe('extractSets', () => {
     expect(extractSets('Squat 5x3+ @RPE8 T1')).toEqual({
       name: 'Squat',
       sets: 5,
+      repsMin: 3,
+      repsMax: 3,
       note: '5x3+ @RPE8 T1',
     })
+  })
+
+  it('reads a rep range', () => {
+    expect(extractSets('Romanian Deadlift 3x8-10')).toMatchObject({
+      name: 'Romanian Deadlift',
+      sets: 3,
+      repsMin: 8,
+      repsMax: 10,
+    })
+  })
+
+  it('does not read a note separator as a rep range', () => {
+    // "2x6 — 3 RIR" is how a prescription with a note is actually written. Read
+    // as a range it inverts to 6-to-3, which is not a prescription at all.
+    expect(extractSets('Chest-supported row 2x6 — 3 RIR. Weekly upper body dose.')).toMatchObject({
+      name: 'Chest-supported row',
+      sets: 2,
+      repsMin: 6,
+      repsMax: 6,
+    })
+    expect(extractSets('Face pull 2x15 - light')).toMatchObject({ repsMin: 15, repsMax: 15 })
+  })
+
+  it('reads a duration rather than reps for timed work', () => {
+    expect(extractSets('Plank 3x30s')).toMatchObject({ sets: 3, durationSec: 30 })
+    expect(extractSets('Plank 3x2min')).toMatchObject({ sets: 3, durationSec: 120 })
+    expect(extractSets('Plank 3x30s').repsMin).toBeUndefined()
+  })
+
+  it('does not read a distance as reps', () => {
+    // Twenty metres, not twenty reps.
+    expect(extractSets("Farmer's Walk 2x20m")).toMatchObject({ sets: 2 })
+    expect(extractSets("Farmer's Walk 2x20m").repsMin).toBeUndefined()
   })
 
   it('reads a written-out set count', () => {
@@ -88,6 +125,8 @@ describe('parseRoutineText', () => {
       exercise: 'Barbell Back Squat',
       plannedSets: 5,
       note: '5x3+',
+      plannedRepsMin: 3,
+      plannedRepsMax: 3,
       recognised: true,
       rawSets: 5,
     })

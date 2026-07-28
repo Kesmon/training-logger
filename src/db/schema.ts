@@ -67,6 +67,17 @@ export interface Exercise {
 export interface Routine {
   id: string
   name: string
+  /**
+   * Increments when a routine of the same name is imported again, so a logged
+   * session can be traced to the exact revision it was performed under.
+   */
+  version: number
+  /**
+   * Set on the older routine when a newer version replaces it. Superseded
+   * routines stay resolvable — old sessions point at them — but drop out of
+   * the routine list so the library does not fill with duplicate names.
+   */
+  supersededBy?: string
   source: 'csv' | 'text' | 'json' | 'manual'
   /** The original imported file, kept so a parser fix can be replayed. */
   sourceRaw?: string
@@ -88,6 +99,20 @@ export interface RoutineItem {
   order: number
   exerciseId: string
   plannedSets: number
+  /**
+   * Prescribed reps. Equal for a fixed prescription, different for a range —
+   * `3x8-10` gives min 8, max 10. Both are always set together, so a consumer
+   * never has to decide whether a single column meant a bound or a target.
+   */
+  plannedRepsMin?: number
+  plannedRepsMax?: number
+  /** For timed work: the `30s` in `Plank 3x30s`. */
+  plannedDurationSec?: number
+  /**
+   * The exercise name as written in the imported file, kept when it differs
+   * from the library entry it matched. Exported as `exercise_alias_of`.
+   */
+  sourceName?: string
   /** Free text such as "5x3+ T1". Shown while lifting, never enforced. */
   note?: string
 }
@@ -102,6 +127,8 @@ export interface Session {
   routineDayId?: string
   /** Snapshotted so history survives deleting the routine it came from. */
   routineName?: string
+  /** The revision performed under, so re-importing mid-block cannot rewrite it. */
+  routineVersion?: number
   dayName?: string
   bodyweightKg?: number
   sessionRpe?: number
@@ -132,6 +159,24 @@ export interface SetEntry {
   timeSec?: number
   distanceM?: number
   bandColor?: string
+
+  /**
+   * What this set was prescribed to be, copied from the routine when the
+   * session was laid out.
+   *
+   * Snapshotted rather than joined through `routineItemId`, for the same reason
+   * `exerciseName` is: the routine can be edited, superseded or deleted, and a
+   * logged session must still say what it was asked to do. Blank on sets from a
+   * session that was not started from a routine.
+   */
+  plannedSets?: number
+  plannedRepsMin?: number
+  plannedRepsMax?: number
+  plannedDurationSec?: number
+  plannedNote?: string
+  /** The routine's spelling, when it differed from the matched exercise. */
+  plannedExerciseName?: string
+
   status: SetStatus
   /**
    * Mirrors `status === 'completed'`. Kept as a separate stored field only
@@ -197,6 +242,19 @@ export class TrainingDb extends Dexie {
         .toCollection()
         .modify((set) => {
           set.status = set.isComplete ? 'completed' : 'planned'
+        }),
+    )
+
+    // v3 adds prescriptions and routine versions. Every new field is optional,
+    // so the only backfill needed is a version number on existing routines —
+    // sessions already logged genuinely have no prescription to recover, and
+    // leaving those columns blank is the honest answer rather than a guess.
+    this.version(3).upgrade((tx) =>
+      tx
+        .table<Routine>('routines')
+        .toCollection()
+        .modify((routine) => {
+          routine.version = 1
         }),
     )
   }

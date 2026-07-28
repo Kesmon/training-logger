@@ -3,6 +3,15 @@
 export interface ParsedItem {
   exercise: string
   plannedSets: number
+  /**
+   * Prescribed reps. Always both or neither: a fixed `3x10` sets them equal,
+   * a range `3x8-10` sets 8 and 10. A single column would have to either
+   * truncate a range or stringify it, and both need parsing back out.
+   */
+  plannedRepsMin?: number
+  plannedRepsMax?: number
+  /** For timed work: the 30 in `Plank 3x30s`. */
+  plannedDurationSec?: number
   /** Free text such as "5x3+ T1" — shown while lifting, never enforced. */
   note?: string
   /**
@@ -69,20 +78,68 @@ export function cleanExerciseName(raw: string): string {
  * Returns the text before the match as the exercise name, since people write
  * the scheme after the movement.
  */
-export function extractSets(line: string): { name: string; sets?: number; note?: string } {
-  const cross = line.match(/(\d+)\s*[x×*]\s*(\d+)/i)
+export interface ExtractedScheme {
+  name: string
+  sets?: number
+  repsMin?: number
+  repsMax?: number
+  durationSec?: number
+  note?: string
+}
+
+/**
+ * `5x3` · `3 × 10` · `3x8-10` · `Plank 3x30s` · `Farmer's Walk 2x20m`
+ *
+ * The trailing unit matters: without it `2x20m` reads as twenty reps rather
+ * than twenty metres, and `3x30s` as thirty reps rather than a thirty-second
+ * hold. Both are in her programme, so the second number is only treated as reps
+ * when nothing says otherwise.
+ */
+const SCHEME =
+  /(\d+)\s*[x×*]\s*(\d+)(?:\s*[-–]\s*(\d+))?\s*(seconds|secs|sec|s|mins|min|m)?\b/i
+
+function unitOf(raw: string | undefined): 'reps' | 'seconds' | 'minutes' | 'distance' {
+  if (!raw) return 'reps'
+  const u = raw.toLowerCase()
+  if (u === 'm') return 'distance'
+  if (u.startsWith('min')) return 'minutes'
+  return 'seconds'
+}
+
+export function extractSets(line: string): ExtractedScheme {
+  const cross = line.match(SCHEME)
   if (cross && cross.index !== undefined) {
+    const sets = Number(cross[1])
+    const second = Number(cross[2])
+    const unit = unitOf(cross[4])
+
+    // A dash only opens a rep range when the number after it is larger. Coaches
+    // write "2x6 — 3 RIR", where the dash separates a note rather than bounding
+    // a range, and reading that as 6-to-3 inverts the prescription.
+    const upper = cross[3] ? Number(cross[3]) : undefined
+    const rangeTop = upper !== undefined && upper > second ? upper : second
+
+    const measured: Pick<ExtractedScheme, 'repsMin' | 'repsMax' | 'durationSec'> =
+      unit === 'reps'
+        ? { repsMin: second, repsMax: rangeTop }
+        : unit === 'seconds'
+          ? { durationSec: second }
+          : unit === 'minutes'
+            ? { durationSec: second * 60 }
+            : {} // a distance; the figure survives in the note
+
     const name = line.slice(0, cross.index).trim()
     const note = line.slice(cross.index).trim()
     // A leading match means the line is like "5x5 Squat" — the name follows.
     if (!name) {
       return {
         name: cleanExerciseName(note.replace(cross[0], '')),
-        sets: Number(cross[1]),
+        sets,
+        ...measured,
         note: cross[0],
       }
     }
-    return { name: cleanExerciseName(name), sets: Number(cross[1]), note: note || undefined }
+    return { name: cleanExerciseName(name), sets, ...measured, note: note || undefined }
   }
 
   const sets = line.match(/(\d+)\s*(?:sets?|sett)\b/i)

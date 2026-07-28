@@ -131,6 +131,7 @@ export async function startSession(opts?: {
   routineDayId?: string
   routineId?: string
   routineName?: string
+  routineVersion?: number
   dayName?: string
 }): Promise<Session> {
   const session: Session = {
@@ -224,6 +225,16 @@ export async function addSet(
         bandColor: previous.bandColor,
         // Effort is deliberately not carried over: it is the thing that
         // actually changes set to set, and a stale value is worse than none.
+
+        // The prescription carries over too, so a set added beyond what was
+        // asked for still knows what was asked for — which is exactly what
+        // makes it identifiable as an extra set rather than a normal one.
+        plannedSets: previous.plannedSets,
+        plannedRepsMin: previous.plannedRepsMin,
+        plannedRepsMax: previous.plannedRepsMax,
+        plannedDurationSec: previous.plannedDurationSec,
+        plannedNote: previous.plannedNote,
+        plannedExerciseName: previous.plannedExerciseName,
       }
     : { effortType: exercise.defaultEffortType ?? undefined }
 
@@ -345,8 +356,21 @@ export async function seedSessionFromRoutineDay(
     const exercise = await db.exercises.get(item.exerciseId)
     if (!exercise) continue
     const planned = Math.max(1, Math.min(item.plannedSets || 1, 30))
+
+    // Copied onto every set rather than joined through the routine, for the
+    // same reason exerciseName is: the routine can be superseded or deleted,
+    // and a logged session must still be able to say what it was asked to do.
+    const prescription: Partial<SetEntry> = {
+      plannedSets: planned,
+      plannedRepsMin: item.plannedRepsMin,
+      plannedRepsMax: item.plannedRepsMax,
+      plannedDurationSec: item.plannedDurationSec,
+      plannedNote: item.note,
+      plannedExerciseName: item.sourceName,
+    }
+
     for (let i = 0; i < planned; i++) {
-      await addSet(sessionId, exercise, i === 0 && item.note ? { notes: item.note } : undefined)
+      await addSet(sessionId, exercise, prescription)
     }
   }
 }

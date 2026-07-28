@@ -11,7 +11,9 @@ export function Today() {
   const recent = useLiveQuery(() => listSessions(8), [], [])
   const routineDays = useLiveQuery(
     async () => {
-      const routines = await db.routines.toArray()
+      // Superseded versions stay in the database so old sessions resolve, but
+      // offering their days here would let her start yesterday's revision.
+      const routines = (await db.routines.toArray()).filter((r) => !r.supersededBy)
       const days = await db.routineDays.toArray()
       return days
         .sort((a, b) => a.order - b.order)

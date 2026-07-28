@@ -51,6 +51,9 @@ export function RoutineDetail({ id }: { id: string }) {
       routineDayId: dayId,
       routineId: id,
       routineName: routine!.name,
+      // Snapshotted, so re-importing this routine mid-block cannot retroactively
+      // change which revision an already-logged session was performed under.
+      routineVersion: routine!.version,
       dayName,
     })
     // The routine supplies structure only — blank sets, no prescribed loads.

@@ -7,7 +7,7 @@ import {
   estimate1rmFromSet,
   hardSetsPerMuscle,
   percentOf1rm,
-  restIntervals,
+  loggedGaps,
   rpeAdjusted1rm,
   runningPrs,
   volumeLoad,
@@ -241,14 +241,14 @@ describe('runningPrs', () => {
   })
 })
 
-describe('restIntervals', () => {
+describe('loggedGaps', () => {
   it('derives rest from the logged timestamps, with no timer involved', () => {
     const sets = [
       makeSet({ id: 'a', loggedAt: '2026-07-01T10:00:00Z' }),
       makeSet({ id: 'b', loggedAt: '2026-07-01T10:02:30Z' }),
       makeSet({ id: 'c', loggedAt: '2026-07-01T10:05:00Z' }),
     ]
-    const rests = restIntervals(sets)
+    const rests = loggedGaps(sets)
     expect(rests.get('a')).toBeUndefined() // nothing before the first set
     expect(rests.get('b')).toBe(150)
     expect(rests.get('c')).toBe(150)
@@ -259,6 +259,6 @@ describe('restIntervals', () => {
       makeSet({ id: 'a', loggedAt: '2026-07-01T10:00:00Z' }),
       makeSet({ id: 'b', isComplete: 0 }),
     ]
-    expect(restIntervals(sets).size).toBe(0)
+    expect(loggedGaps(sets).size).toBe(0)
   })
 })

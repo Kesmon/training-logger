@@ -17,7 +17,9 @@ export function Library() {
   const exercises = useLiveQuery(() => listExercises(), [], [])
   const routines = useLiveQuery(
     async () => {
-      const all = await db.routines.orderBy('createdAt').reverse().toArray()
+      const all = (await db.routines.orderBy('createdAt').reverse().toArray()).filter(
+        (r) => !r.supersededBy,
+      )
       return Promise.all(
         all.map(async (routine) => ({
           routine,

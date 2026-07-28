@@ -197,7 +197,7 @@ describe('mergeExercises', () => {
     const real = await createExercise({ name: 'Face pull' })
     const junk = await createExercise({ name: 'facepull    x15 @' })
 
-    await db.routines.add({ id: 'r1', name: 'R', source: 'text', createdAt: '2026-07-01' })
+    await db.routines.add({ id: 'r1', name: 'R', version: 1, source: 'text', createdAt: '2026-07-01' })
     await db.routineDays.add({ id: 'd1', routineId: 'r1', order: 0, name: 'Day A' })
     await db.routineItems.add({
       id: 'i1',

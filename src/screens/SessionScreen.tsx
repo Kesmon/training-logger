@@ -22,15 +22,22 @@ import {
   getExerciseHistory,
   getSessionSets,
   removeExerciseFromSession,
+  saveSettings,
   updateSet,
 } from '../db/queries'
 import { db, type Exercise, type SetEntry } from '../db/schema'
+import { bundleToCsv, UTF8_BOM } from '../core/export/toCsv'
+import { buildBundle, narrowToSessions } from '../core/export/toJson'
+import { sessionFilename } from '../core/export/filename'
+import { deliverFile } from '../platform/share'
 import { navigate } from '../router'
 
 export function SessionScreen({ id }: { id: string }) {
   const settings = useSettings()
   const [picking, setPicking] = useState(false)
   const [confirming, setConfirming] = useState(false)
+  const [finished, setFinished] = useState(false)
+  const [sending, setSending] = useState(false)
 
   const data = useLiveQuery(async () => {
     const session = await db.sessions.get(id)
@@ -89,7 +96,24 @@ export function SessionScreen({ id }: { id: string }) {
 
   async function onFinish() {
     await finishSession(id)
-    navigate(`/history/${id}`, { replace: true })
+    // Deliberately not navigating away yet: the export is offered here, while
+    // the phone is already in hand. Anything that has to be remembered later,
+    // after training, does not reliably happen.
+    setFinished(true)
+  }
+
+  async function sendToCoach() {
+    setSending(true)
+    try {
+      const bundle = await buildBundle()
+      const sameDay = bundle.sessions.filter((s) => s.date === session.date)
+      const csv = bundleToCsv(narrowToSessions(bundle, [id]), settings.csvFlavor)
+      await deliverFile(sessionFilename(session, sameDay), UTF8_BOM + csv, 'text/csv')
+      await saveSettings({ lastExportAt: new Date().toISOString(), sessionsSinceExport: 0 })
+    } finally {
+      setSending(false)
+      navigate(`/history/${id}`, { replace: true })
+    }
   }
 
   return (
@@ -205,7 +229,36 @@ export function SessionScreen({ id }: { id: string }) {
         />
       )}
 
-      {confirming && (
+      {confirming && finished && (
+        <Sheet title="Session saved" onClose={() => navigate(`/history/${id}`, { replace: true })}>
+          <div className="stack">
+            <p className="small muted">
+              {done.length} set{done.length === 1 ? '' : 's'} logged
+              {skipped.length > 0 && `, ${skipped.length} skipped`}
+              {untouched.length > 0 && `, ${untouched.length} not logged`}.
+            </p>
+            <button
+              className="btn btn--primary btn--lg btn--block"
+              disabled={sending}
+              onClick={() => void sendToCoach()}
+            >
+              {sending ? 'Preparing…' : 'Send to coach'}
+            </button>
+            <p className="tiny faint">
+              Exports just this session as {sessionFilename(session, [session])}. Saving it to the
+              same folder each time keeps it to a couple of taps.
+            </p>
+            <button
+              className="btn btn--block"
+              onClick={() => navigate(`/history/${id}`, { replace: true })}
+            >
+              Not now
+            </button>
+          </div>
+        </Sheet>
+      )}
+
+      {confirming && !finished && (
         <Sheet title="Finish session" onClose={() => setConfirming(false)}>
           <div className="stack">
             <div className="statgrid">

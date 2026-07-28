@@ -115,6 +115,8 @@ export async function resolveNames(parsed: ParsedRoutine): Promise<NameResolutio
 
 export interface CommitResult {
   routineId: string
+  /** 1 for a new routine, higher when it replaced one of the same name. */
+  version: number
   created: number
   linked: number
   skipped: number
@@ -171,7 +173,10 @@ export async function commitRoutine(
         byName.set(resolution.name, match.id)
         linked++
       } else {
-        const made = await createExercise({ name: corrected, equipment: decision.equipment })
+        const made = await createExercise({
+          name: corrected,
+          equipment: decision.equipment,
+        })
         byName.set(resolution.name, made.id)
         created++
       }
@@ -194,35 +199,70 @@ export async function commitRoutine(
   }
 
   const routineId = newId()
-  await db.transaction('rw', [db.routines, db.routineDays, db.routineItems], async () => {
-    await db.routines.add({
-      id: routineId,
-      name: parsed.name,
-      source: parsed.source,
-      sourceRaw,
-      createdAt: nowIso(),
-    })
+  let version = 1
 
-    for (const [dayIndex, day] of parsed.days.entries()) {
-      const dayId = newId()
-      await db.routineDays.add({ id: dayId, routineId, order: dayIndex, name: day.name })
-
-      for (const [itemIndex, item] of day.items.entries()) {
-        const exerciseId = byName.get(item.exercise.trim())
-        if (!exerciseId) continue
-        await db.routineItems.add({
-          id: newId(),
-          routineDayId: dayId,
-          order: itemIndex,
-          exerciseId,
-          plannedSets: item.plannedSets,
-          note: item.note,
-        })
+  // exercises is in scope so each item's written name can be compared against
+  // the library entry it resolved to, for exercise_alias_of.
+  await db.transaction(
+    'rw',
+    [db.routines, db.routineDays, db.routineItems, db.exercises],
+    async () => {
+      // Re-importing under the same name makes a new version rather than a second
+      // routine with a duplicated name. The previous one is kept — sessions
+      // logged against it must still resolve — but marked superseded so it drops
+      // out of the routine list.
+      const sameName = (await db.routines.where('name').equals(parsed.name).toArray()).filter(
+        (r) => !r.supersededBy,
+      )
+      if (sameName.length > 0) {
+        version = Math.max(...sameName.map((r) => r.version ?? 1)) + 1
+        await Promise.all(
+          sameName.map((r) => db.routines.update(r.id, { supersededBy: routineId })),
+        )
       }
-    }
-  })
 
-  return { routineId, created, linked, skipped }
+      await db.routines.add({
+        id: routineId,
+        name: parsed.name,
+        version,
+        source: parsed.source,
+        sourceRaw,
+        createdAt: nowIso(),
+      })
+
+      for (const [dayIndex, day] of parsed.days.entries()) {
+        const dayId = newId()
+        await db.routineDays.add({
+          id: dayId,
+          routineId,
+          order: dayIndex,
+          name: day.name,
+        })
+
+        for (const [itemIndex, item] of day.items.entries()) {
+          const written = item.exercise.trim()
+          const exerciseId = byName.get(written)
+          if (!exerciseId) continue
+          const matched = await db.exercises.get(exerciseId)
+          await db.routineItems.add({
+            id: newId(),
+            routineDayId: dayId,
+            order: itemIndex,
+            exerciseId,
+            plannedSets: item.plannedSets,
+            plannedRepsMin: item.plannedRepsMin,
+            plannedRepsMax: item.plannedRepsMax,
+            plannedDurationSec: item.plannedDurationSec,
+            // Only worth keeping when the file called it something else.
+            sourceName: matched && matched.name !== written ? written : undefined,
+            note: item.note,
+          })
+        }
+      }
+    },
+  )
+
+  return { routineId, version, created, linked, skipped }
 }
 
 export async function deleteRoutine(routineId: string): Promise<void> {

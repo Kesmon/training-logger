@@ -13,7 +13,7 @@ import {
   setTypeShort,
   trimNum,
 } from '../core/format'
-import { restIntervals, sessionVolume } from '../core/metrics'
+import { loggedGaps, sessionVolume } from '../core/metrics'
 import { useSettings } from '../hooks/useSettings'
 import { deleteSession, getSessionSets } from '../db/queries'
 import { db } from '../db/schema'
@@ -40,7 +40,7 @@ export function SessionDetail({ id }: { id: string }) {
 
   const { session, sets } = data
   const duration = sessionDuration(session.startedAt, session.endedAt)
-  const rests = restIntervals(sets)
+  const rests = loggedGaps(sets)
   const blocks = [...new Set(sets.map((s) => s.exerciseId))]
     .map((exId) => sets.filter((s) => s.exerciseId === exId))
     .sort((a, b) => (a[0]?.order ?? 0) - (b[0]?.order ?? 0))

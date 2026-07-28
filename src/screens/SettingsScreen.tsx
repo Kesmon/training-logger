@@ -51,7 +51,7 @@ export function SettingsScreen() {
     setError(null)
     try {
       const bundle = await buildBundle()
-      const csv = bundleToCsv(bundle, settings.csvFlavor, settings.e1rmFormula)
+      const csv = bundleToCsv(bundle, settings.csvFlavor)
       // The BOM is what makes Excel on Windows read this as UTF-8 rather than
       // the ANSI codepage — without it "Markløft" arrives as "MarklÃ¸ft".
       // Written as an escape, not a literal, so it survives editors and diffs.

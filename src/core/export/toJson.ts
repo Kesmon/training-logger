@@ -28,6 +28,20 @@ export async function buildBundle(): Promise<ExportBundle> {
   }
 }
 
+/**
+ * The same bundle narrowed to particular sessions, for sending one session
+ * rather than the whole history. Exercises and routines are kept whole — they
+ * are lookup tables, and the export needs them to resolve names and muscles.
+ */
+export function narrowToSessions(bundle: ExportBundle, sessionIds: string[]): ExportBundle {
+  const wanted = new Set(sessionIds)
+  return {
+    ...bundle,
+    sessions: bundle.sessions.filter((s) => wanted.has(s.id)),
+    setEntries: bundle.setEntries.filter((s) => wanted.has(s.sessionId)),
+  }
+}
+
 export async function bundleToJson(): Promise<string> {
   return JSON.stringify(await buildBundle(), null, 2)
 }

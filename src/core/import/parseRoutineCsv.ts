@@ -85,7 +85,7 @@ export function splitCsv(text: string, delimiter: string): string[][] {
   return rows.filter((r) => r.some((cell) => cell.trim() !== ''))
 }
 
-type Column = 'routine' | 'day' | 'order' | 'exercise' | 'sets' | 'note'
+type Column = 'routine' | 'day' | 'order' | 'exercise' | 'sets' | 'reps' | 'note'
 
 // Norwegian spellings are included because that is what this user's Excel writes.
 const HEADERS: Record<Column, string[]> = {
@@ -94,7 +94,19 @@ const HEADERS: Record<Column, string[]> = {
   order: ['order', 'no', 'num', 'nr', '#', 'index', 'rekkefølge'],
   exercise: ['exercise', 'movement', 'lift', 'øvelse', 'ovelse'],
   sets: ['sets', 'set', 'sett', 'antallsett'],
-  note: ['note', 'notes', 'reps', 'prescription', 'target', 'scheme', 'kommentar', 'merknad'],
+  // 'reps' used to be a synonym for 'note'. Now that prescribed reps are
+  // stored in their own right, a reps column has to mean reps.
+  reps: ['reps', 'rep', 'repetitions', 'repetisjoner', 'reps@'],
+  note: ['note', 'notes', 'prescription', 'target', 'scheme', 'kommentar', 'merknad'],
+}
+
+/** "8" · "8-10" · "8 to 10" · "8–10 reps" */
+function parseReps(raw: string): { min: number; max: number } | undefined {
+  if (!raw.trim()) return undefined
+  const range = raw.match(/(\d+)\s*(?:[-–—]|to|til)\s*(\d+)/i)
+  if (range) return { min: Number(range[1]), max: Number(range[2]) }
+  const single = raw.match(/\d+/)
+  return single ? { min: Number(single[0]), max: Number(single[0]) } : undefined
 }
 
 function normaliseHeader(h: string): string {
@@ -190,10 +202,25 @@ export function parseRoutineCsv(text: string, fallbackName = 'Imported routine')
     const explicit = Number.isFinite(fromColumn)
     const resolved = explicit ? fromColumn : (inline.sets ?? fromNote)
 
+    // Reps can come from a dedicated column, from the exercise cell's own
+    // scheme, or from a scheme written into the note. First one wins.
+    const fromRepsColumn = parseReps(cell(row, cols.reps))
+    const fromNoteScheme = noteCell ? extractSets(noteCell) : undefined
+    const reps =
+      fromRepsColumn ??
+      (inline.repsMin !== undefined
+        ? { min: inline.repsMin, max: inline.repsMax ?? inline.repsMin }
+        : fromNoteScheme?.repsMin !== undefined
+          ? { min: fromNoteScheme.repsMin, max: fromNoteScheme.repsMax ?? fromNoteScheme.repsMin }
+          : undefined)
+
     const entry = days.get(dayName)!
     entry.day.items.push({
       exercise: inline.name || cleanExerciseName(exerciseCell),
       plannedSets: clampSets(resolved),
+      plannedRepsMin: reps?.min,
+      plannedRepsMax: reps?.max,
+      plannedDurationSec: inline.durationSec ?? fromNoteScheme?.durationSec,
       note: noteCell || inline.note || undefined,
       // A dedicated sets column counts as recognised even with no inline scheme.
       recognised: resolved !== undefined && Number.isFinite(resolved),

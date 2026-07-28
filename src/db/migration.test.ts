@@ -61,6 +61,38 @@ describe('v1 to v2 migration', () => {
     upgraded.close()
   })
 
+  it('gives existing routines a version without inventing prescriptions', async () => {
+    const name = `migration-v3-${Math.random().toString(36).slice(2)}`
+
+    const old = new Dexie(name)
+    old.version(1).stores(V1_STORES)
+    old.version(2) // status was a field change only, no store change
+    await old.open()
+    await old.table('routines').add({
+      id: 'r1',
+      name: 'Block 1',
+      source: 'text',
+      createdAt: '2026-07-01T00:00:00Z',
+    })
+    await old.table('setEntries').add({ ...v1Set('n1', 1), status: 'completed' })
+    old.close()
+
+    const upgraded = new TrainingDb(name)
+    const routine = (await upgraded.routines.get('r1'))!
+    expect(routine.version).toBe(1)
+    expect(routine.supersededBy).toBeUndefined()
+
+    // Sessions already logged have no prescription to recover, and guessing one
+    // would be worse than leaving it blank.
+    const set = (await upgraded.setEntries.get('n1'))!
+    expect(set.plannedSets).toBeUndefined()
+    expect(set.plannedRepsMin).toBeUndefined()
+    expect(set.status).toBe('completed')
+    expect(set.weightKg).toBe(140)
+
+    upgraded.close()
+  })
+
   it('leaves an empty v1 database usable', async () => {
     const name = `migration-empty-${Math.random().toString(36).slice(2)}`
     const old = new Dexie(name)

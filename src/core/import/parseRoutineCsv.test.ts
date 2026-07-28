@@ -54,8 +54,8 @@ describe('parseRoutineCsv', () => {
     expect(routine.name).toBe('GZCLP')
     expect(routine.days.map((d) => d.name)).toEqual(['Day A', 'Day B'])
     expect(routine.days[0]!.items).toEqual([
-      { exercise: 'Barbell Back Squat', plannedSets: 5, note: '5x3+ T1', recognised: true, rawSets: 5 },
-      { exercise: 'Bench Press', plannedSets: 3, note: '3x10 T2', recognised: true, rawSets: 3 },
+      { exercise: 'Barbell Back Squat', plannedSets: 5, note: '5x3+ T1', plannedRepsMin: 3, plannedRepsMax: 3, recognised: true, rawSets: 5 },
+      { exercise: 'Bench Press', plannedSets: 3, note: '3x10 T2', plannedRepsMin: 10, plannedRepsMax: 10, recognised: true, rawSets: 3 },
     ])
     expect(routine.days[1]!.items[0]).toMatchObject({ exercise: 'Deadlift', plannedSets: 5 })
   })
@@ -109,8 +109,8 @@ describe('parseRoutineCsv', () => {
   it('pulls the set count out of an exercise cell that carries the scheme', () => {
     const routine = parseRoutineCsv('exercise\nSquat 5x5\nBench 3x10')
     expect(routine.days[0]!.items).toEqual([
-      { exercise: 'Squat', plannedSets: 5, note: '5x5', recognised: true, rawSets: 5 },
-      { exercise: 'Bench', plannedSets: 3, note: '3x10', recognised: true, rawSets: 3 },
+      { exercise: 'Squat', plannedSets: 5, note: '5x5', plannedRepsMin: 5, plannedRepsMax: 5, recognised: true, rawSets: 5 },
+      { exercise: 'Bench', plannedSets: 3, note: '3x10', plannedRepsMin: 10, plannedRepsMax: 10, recognised: true, rawSets: 3 },
     ])
   })
 

@@ -235,20 +235,38 @@ export function hardSetsPerMuscle(
 }
 
 /**
- * Seconds between each set and the one logged before it in the same session.
- * Falls out of the `loggedAt` timestamps for free — no timer needed.
+ * Seconds between ticking one set and ticking the one before it.
+ *
+ * This is **not rest**, and is deliberately not named as though it were. It is
+ * a write-time interval: if sets are ticked out of order, or several at once
+ * after the fact, the number means nothing. So it is only emitted where the
+ * timestamps run forward in set order, and left blank otherwise — a blank is
+ * more useful than a number that cannot be trusted.
+ *
+ * Ordering is by set position rather than by timestamp, because sorting by
+ * timestamp hides exactly the out-of-order case this needs to detect.
  */
-export function restIntervals(sessionSets: SetEntry[]): Map<string, number> {
-  const stamped = sessionSets
-    .filter((s) => s.isComplete && s.loggedAt)
-    .sort((a, b) => a.loggedAt!.localeCompare(b.loggedAt!))
+export function loggedGaps(sessionSets: SetEntry[]): Map<string, number> {
+  const ordered = [...sessionSets].sort(
+    (a, b) => a.order - b.order || a.setNumber - b.setNumber,
+  )
 
   const out = new Map<string, number>()
-  for (let i = 1; i < stamped.length; i++) {
-    const prev = stamped[i - 1]!
-    const cur = stamped[i]!
-    const gap = (new Date(cur.loggedAt!).getTime() - new Date(prev.loggedAt!).getTime()) / 1000
-    if (gap >= 0) out.set(cur.id, Math.round(gap))
+  let previous: SetEntry | undefined
+
+  for (const set of ordered) {
+    if (set.status !== 'completed' || !set.loggedAt) {
+      // A gap across a skipped or unlogged set is not an interval between two
+      // efforts, so the chain restarts rather than spanning it.
+      previous = undefined
+      continue
+    }
+    if (previous?.loggedAt) {
+      const gap =
+        (new Date(set.loggedAt).getTime() - new Date(previous.loggedAt).getTime()) / 1000
+      if (gap > 0) out.set(set.id, Math.round(gap))
+    }
+    previous = set
   }
   return out
 }

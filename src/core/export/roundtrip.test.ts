@@ -6,8 +6,11 @@ import {
   finishSession,
   startSession,
   updateSet,
+  seedSessionFromRoutineDay,
 } from '../../db/queries'
 import { db } from '../../db/schema'
+import { commitRoutine, resolveNames } from '../import/apply'
+import { parseRoutineText } from '../import/parseRoutineText'
 import { bundleToCsv } from './toCsv'
 import { buildBundle, parseBundle, restoreBundle } from './toJson'
 
@@ -105,40 +108,43 @@ describe('JSON round trip', () => {
 describe('CSV export', () => {
   it('writes one row per set with computed columns', async () => {
     await seed()
-    const csv = bundleToCsv(await buildBundle(), 'international', 'epley')
+    const csv = bundleToCsv(await buildBundle(), 'international')
     const lines = csv.split('\r\n')
 
-    expect(lines[0]).toContain('date,session_id,routine,day,exercise')
+    expect(lines[0]).toContain('schema_version,date,routine_id,routine_name')
     expect(lines).toHaveLength(4) // header + 3 sets
 
     const header = lines[0]!.split(',')
     const working = lines.find((l) => l.includes('137.5'))!.split(',')
     const col = (name: string) => working[header.indexOf(name)]
 
-    expect(col('exercise')).toBe('Barbell Back Squat')
-    expect(col('routine')).toBe('GZCLP')
+    expect(col('exercise_name')).toBe('Barbell Back Squat')
+    expect(col('routine_name')).toBe('GZCLP')
     expect(col('set_type')).toBe('working')
     expect(col('weight_kg')).toBe('137.5')
     expect(col('reps')).toBe('5')
     expect(col('effort_value')).toBe('8')
     expect(col('volume_kg')).toBe('687.5')
-    // 137.5 at 5 reps @8 is 81.1% of max.
-    expect(Number(col('e1rm_kg'))).toBeCloseTo(169.5, 0)
+    expect(col('set_category')).toBe('working')
+    // Dropped deliberately: the method depended on the values, so the number
+    // could not be reproduced from the file.
+    expect(header).not.toContain('e1rm_kg')
   })
 
-  it('leaves volume and e1RM blank for warm-ups', async () => {
+  it('leaves volume blank for warm-ups', async () => {
     await seed()
     const csv = bundleToCsv(await buildBundle())
     const header = csv.split('\r\n')[0]!.split(',')
     const warmup = csv.split('\r\n').find((l) => l.includes('warmup'))!.split(',')
     expect(warmup[header.indexOf('volume_kg')]).toBe('')
-    expect(warmup[header.indexOf('e1rm_kg')]).toBe('')
+    expect(warmup[header.indexOf('set_category')]).toBe('preparatory')
+    expect(warmup[header.indexOf('working_set_number')]).toBe('')
   })
 
   it('switches delimiter and decimal mark together for European Excel', async () => {
     await seed()
     const csv = bundleToCsv(await buildBundle(), 'european')
-    expect(csv.split('\r\n')[0]).toContain('date;session_id')
+    expect(csv.split('\r\n')[0]).toContain('schema_version;date')
     // Decimals must move to ',' as well, or the ';' file still misparses.
     expect(csv).toContain('137,5')
     expect(csv).not.toContain('137.5')
@@ -221,10 +227,9 @@ describe('CSV export', () => {
     expect(col('effort_type')).toBe('')
     expect(col('effort_value')).toBe('')
     expect(col('volume_kg')).toBe('')
-    expect(col('e1rm_kg')).toBe('')
     expect(col('logged_at')).toBe('')
     // Identity and ordering are still present — that is the point of the row.
-    expect(col('exercise')).toBe('Squat')
+    expect(col('exercise_name')).toBe('Squat')
     expect(col('set_number')).toBe('2')
   })
 
@@ -244,6 +249,125 @@ describe('CSV export', () => {
       .map((r) => r.split(',')[header.indexOf('volume_kg')])
       .filter(Boolean)
     expect(volumes).toEqual(['500'])
+  })
+
+  it('carries the prescription alongside what was done', async () => {
+    // A routine day, laid out and then partly performed — the case the whole
+    // schema exists for.
+    const squat = await createExercise({ name: 'Barbell Back Squat', equipment: 'barbell' })
+    const parsed = parseRoutineText('# Block 1\n## Day A\n- Barbell Back Squat 3x8-10')
+    const { routineId } = await commitRoutine(parsed, await resolveNames(parsed), new Map())
+
+    const day = (await db.routineDays.where('routineId').equals(routineId).toArray())[0]!
+    const routine = (await db.routines.get(routineId))!
+    const session = await startSession({
+      routineId,
+      routineDayId: day.id,
+      routineName: routine.name,
+      routineVersion: routine.version,
+      dayName: day.name,
+    })
+    await seedSessionFromRoutineDay(session.id, day.id)
+
+    const laid = await db.setEntries.where('sessionId').equals(session.id).toArray()
+    expect(laid).toHaveLength(3)
+
+    // Two done, one skipped, plus a fourth beyond the prescription.
+    laid.sort((a, b) => a.setNumber - b.setNumber)
+    for (const s of laid.slice(0, 2)) {
+      await updateSet(s.id, { weightKg: 100, reps: 9 })
+      await setSetStatus(s.id, 'completed')
+    }
+    await setSetStatus(laid[2]!.id, 'skipped')
+    const extra = await addSet(session.id, squat)
+    await updateSet(extra.id, { weightKg: 90, reps: 12 })
+    await setSetStatus(extra.id, 'completed')
+    await finishSession(session.id)
+
+    const rows = bundleToCsv(await buildBundle()).split('\r\n')
+    const header = rows[0]!.split(',')
+    const cols = (r: string) =>
+      Object.fromEntries(header.map((h, i) => [h, r.split(',')[i]])) as Record<string, string>
+    const body = rows.slice(1).map(cols)
+
+    expect(body).toHaveLength(4)
+    expect(body.map((r) => r.planned_sets)).toEqual(['3', '3', '3', '3'])
+    // A range is carried as both bounds, so nothing has to be parsed back out.
+    expect(body.map((r) => r.planned_reps_min)).toEqual(['8', '8', '8', '8'])
+    expect(body.map((r) => r.planned_reps_max)).toEqual(['10', '10', '10', '10'])
+    expect(body.map((r) => r.set_status)).toEqual([
+      'completed',
+      'completed',
+      'skipped',
+      'completed',
+    ])
+    // The fourth set is the one beyond the prescription.
+    expect(body.map((r) => r.working_set_number)).toEqual(['1', '2', '3', '4'])
+    expect(body.map((r) => r.is_extra)).toEqual(['false', 'false', 'false', 'true'])
+    expect(body[0]!.routine_name).toBe('Block 1')
+    expect(body[0]!.routine_version).toBe('1')
+    expect(body[0]!.routine_id).toBe(routineId)
+  })
+
+  it('does not let warm-ups or drop sets shift the extra-set position', async () => {
+    // set_number counts every row; comparing it against planned_sets would flag
+    // prescribed work as extra the moment a warm-up exists.
+    const squat = await createExercise({ name: 'Squat', equipment: 'barbell' })
+    const session = await startSession({ dayName: 'Day A' })
+
+    const rows: [string, number][] = [
+      ['warmup', 60],
+      ['warmup', 80],
+      ['working', 100],
+      ['working', 100],
+      ['drop', 70],
+      ['working', 100],
+    ]
+    for (const [setType, weightKg] of rows) {
+      const s = await addSet(session.id, squat)
+      await updateSet(s.id, { setType: setType as never, weightKg, reps: 5, plannedSets: 3 })
+      await setSetStatus(s.id, 'completed')
+    }
+    await finishSession(session.id)
+
+    const lines = bundleToCsv(await buildBundle()).split('\r\n')
+    const header = lines[0]!.split(',')
+    const body = lines
+      .slice(1)
+      .map((r) => Object.fromEntries(header.map((h, i) => [h, r.split(',')[i]])))
+
+    expect(body.map((r) => r.set_category)).toEqual([
+      'preparatory',
+      'preparatory',
+      'working',
+      'working',
+      'continuation',
+      'working',
+    ])
+    // Only the three working sets get a position, and none exceeds 3.
+    expect(body.map((r) => r.working_set_number)).toEqual(['', '', '1', '2', '', '3'])
+    expect(body.map((r) => r.is_extra)).toEqual(['', '', 'false', 'false', '', 'false'])
+  })
+
+  it('blanks logged_gap_sec rather than reporting a negative interval', async () => {
+    const squat = await createExercise({ name: 'Squat', equipment: 'barbell' })
+    const session = await startSession()
+
+    const a = await addSet(session.id, squat)
+    const b = await addSet(session.id, squat)
+    await updateSet(a.id, { weightKg: 100, reps: 5 })
+    await updateSet(b.id, { weightKg: 100, reps: 5 })
+    await setSetStatus(a.id, 'completed')
+    await setSetStatus(b.id, 'completed')
+    // Ticked out of order, which is what produced timestamps running backwards.
+    await updateSet(a.id, { loggedAt: '2026-07-28T12:41:10Z' })
+    await updateSet(b.id, { loggedAt: '2026-07-28T12:41:08Z' })
+    await finishSession(session.id)
+
+    const lines = bundleToCsv(await buildBundle()).split('\r\n')
+    const header = lines[0]!.split(',')
+    const gaps = lines.slice(1).map((r) => r.split(',')[header.indexOf('logged_gap_sec')])
+    expect(gaps).toEqual(['', ''])
   })
 
   it('quotes fields containing the delimiter', async () => {
