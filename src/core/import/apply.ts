@@ -1,11 +1,12 @@
 import { newId, nowIso } from '../ids'
 import {
+  TIMED_FIELDS,
   addExerciseAlias,
   createExercise,
   findExerciseByName,
   listExercises,
 } from '../../db/queries'
-import { db, type Equipment, type Exercise } from '../../db/schema'
+import { db, type Equipment, type Exercise, type LogField } from '../../db/schema'
 import type { ParsedRoutine } from './types'
 
 /** Turns parsed text into database rows, matching exercises as it goes. */
@@ -37,6 +38,10 @@ export interface NameResolution {
   /** A close-but-not-exact candidate, offered to the user to confirm. */
   suggestion?: Exercise
   uses: number
+  /** Any occurrence prescribed a duration, so it is timed work rather than reps. */
+  timed: boolean
+  /** Any occurrence said "per leg". */
+  unilateral: boolean
   /**
    * No set scheme was recognised on the line AND nothing in the library matches
    * it — so the app has no idea what this is. Creating an exercise from a guess
@@ -54,16 +59,18 @@ export type Decision =
 
 /** All distinct exercise names in a routine, each matched where possible. */
 export async function resolveNames(parsed: ParsedRoutine): Promise<NameResolution[]> {
-  const counts = new Map<string, { uses: number; recognised: boolean }>()
+  const counts = new Map<string, { uses: number; recognised: boolean; timed: boolean; unilateral: boolean }>()
   for (const day of parsed.days) {
     for (const item of day.items) {
       const key = item.exercise.trim()
       if (!key) continue
-      const prev = counts.get(key) ?? { uses: 0, recognised: false }
+      const prev = counts.get(key) ?? { uses: 0, recognised: false, timed: false, unilateral: false }
       // One good occurrence vouches for the name across the whole file.
       counts.set(key, {
         uses: prev.uses + 1,
         recognised: prev.recognised || item.recognised,
+        timed: prev.timed || item.plannedDurationSec !== undefined,
+        unilateral: prev.unilateral || item.unilateral === true,
       })
     }
   }
@@ -71,10 +78,10 @@ export async function resolveNames(parsed: ParsedRoutine): Promise<NameResolutio
   const library = await listExercises(true)
   const out: NameResolution[] = []
 
-  for (const [name, { uses, recognised }] of counts) {
+  for (const [name, { uses, recognised, timed, unilateral }] of counts) {
     const existing = await findExerciseByName(name)
     if (existing) {
-      out.push({ name, existing, uses, unreadable: false })
+      out.push({ name, existing, uses, timed, unilateral, unreadable: false })
       continue
     }
 
@@ -82,7 +89,7 @@ export async function resolveNames(parsed: ParsedRoutine): Promise<NameResolutio
     const normalised = normalise(name)
     const sameNormalised = library.find((e) => normalise(e.name) === normalised)
     if (sameNormalised) {
-      out.push({ name, existing: sameNormalised, uses, unreadable: false })
+      out.push({ name, existing: sameNormalised, uses, timed, unilateral, unreadable: false })
       continue
     }
 
@@ -99,6 +106,8 @@ export async function resolveNames(parsed: ParsedRoutine): Promise<NameResolutio
     out.push({
       name,
       uses,
+      timed,
+      unilateral,
       suggestion: bestScore >= 0.6 ? best : undefined,
       unreadable: !recognised,
     })
@@ -111,6 +120,24 @@ export async function resolveNames(parsed: ParsedRoutine): Promise<NameResolutio
       b.uses - a.uses ||
       a.name.localeCompare(b.name),
   )
+}
+
+/**
+ * How a new exercise should be shaped, given what the routine said about it.
+ *
+ * Timed work gets duration and effort rather than weight and reps: an exercise
+ * whose whole prescription is `3x30s` has nowhere to put the held duration
+ * otherwise, which is why that column came back empty.
+ */
+function shapeOf(
+  resolution: NameResolution,
+  chosen: Equipment | undefined,
+): { equipment: Equipment; fields?: LogField[]; isUnilateral?: boolean } {
+  return {
+    equipment: chosen ?? (resolution.timed ? 'bodyweight' : 'barbell'),
+    fields: resolution.timed ? TIMED_FIELDS : undefined,
+    isUnilateral: resolution.unilateral || undefined,
+  }
 }
 
 export interface CommitResult {
@@ -175,7 +202,7 @@ export async function commitRoutine(
       } else {
         const made = await createExercise({
           name: corrected,
-          equipment: decision.equipment,
+          ...shapeOf(resolution, decision.equipment),
         })
         byName.set(resolution.name, made.id)
         created++
@@ -192,7 +219,7 @@ export async function commitRoutine(
 
     const exercise = await createExercise({
       name: resolution.name,
-      equipment: decision?.action === 'create' ? decision.equipment : 'barbell',
+      ...shapeOf(resolution, decision?.action === 'create' ? decision.equipment : undefined),
     })
     byName.set(resolution.name, exercise.id)
     created++

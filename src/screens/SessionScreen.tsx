@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { ExercisePicker } from '../components/ExercisePicker'
 import { IconPlus, IconTrash } from '../components/Icons'
 import { Screen } from '../components/Screen'
+import { NumberField } from '../components/NumberField'
 import { SetRow } from '../components/SetRow'
 import { Sheet } from '../components/Sheet'
 import {
@@ -10,6 +11,8 @@ import {
   fmtDuration,
   fmtEffort,
   fmtWeight,
+  kgToDisplay,
+  displayToKg,
   trimNum,
 } from '../core/format'
 import { lastTimeSets, runningPrs, sessionVolume, type PrFlags } from '../core/metrics'
@@ -23,6 +26,7 @@ import {
   getSessionSets,
   removeExerciseFromSession,
   saveSettings,
+  updateSession,
   updateSet,
 } from '../db/queries'
 import { db, type Exercise, type SetEntry } from '../db/schema'
@@ -157,6 +161,7 @@ export function SessionScreen({ id }: { id: string }) {
               <div className="exblock" key={exercise.id}>
                 <div className="exblock__head">
                   <div className="exblock__name">{exercise.name}</div>
+                  {exercise.isUnilateral && <span className="badge">per side</span>}
                   <button
                     className="btn btn--sm btn--ghost"
                     onClick={() => void removeExerciseFromSession(id, exercise.id)}
@@ -287,6 +292,57 @@ export function SessionScreen({ id }: { id: string }) {
                 decided against it, which is a different thing.
               </p>
             )}
+
+            {/* Captured here because it is the only moment the whole session is
+                in view, and because one tap at the end is worth more than most
+                of the per-set detail. */}
+            <div>
+              <div className="fieldlabel">How hard was the session?</div>
+              <div className="chips">
+                {[5, 6, 7, 8, 9, 10].map((v) => (
+                  <button
+                    key={v}
+                    className={`chip${session.sessionRpe === v ? ' chip--on' : ''}`}
+                    onClick={() =>
+                      void updateSession(id, {
+                        sessionRpe: session.sessionRpe === v ? undefined : v,
+                      })
+                    }
+                  >
+                    {v}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="row" style={{ alignItems: 'flex-end', gap: 10 }}>
+              <div style={{ flex: 1 }}>
+                <div className="fieldlabel">Bodyweight ({settings.unit})</div>
+                <NumberField
+                  value={
+                    session.bodyweightKg === undefined
+                      ? undefined
+                      : kgToDisplay(session.bodyweightKg, settings.unit)
+                  }
+                  onChange={(v) =>
+                    void updateSession(id, {
+                      bodyweightKg: v === undefined ? undefined : displayToKg(v, settings.unit),
+                    })
+                  }
+                  decimal
+                  min={0}
+                />
+              </div>
+            </div>
+
+            <div>
+              <div className="fieldlabel">Session note</div>
+              <input
+                value={session.notes ?? ''}
+                placeholder="Left knee felt off…"
+                onChange={(e) => void updateSession(id, { notes: e.target.value || undefined })}
+              />
+            </div>
             <button className="btn btn--primary btn--lg btn--block" onClick={() => void onFinish()}>
               Finish session
             </button>

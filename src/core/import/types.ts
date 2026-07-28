@@ -12,6 +12,8 @@ export interface ParsedItem {
   plannedRepsMax?: number
   /** For timed work: the 30 in `Plank 3x30s`. */
   plannedDurationSec?: number
+  /** "2x10 per leg" — one limb at a time. */
+  unilateral?: boolean
   /** Free text such as "5x3+ T1" — shown while lifting, never enforced. */
   note?: string
   /**
@@ -84,7 +86,15 @@ export interface ExtractedScheme {
   repsMin?: number
   repsMax?: number
   durationSec?: number
+  unilateral?: boolean
   note?: string
+}
+
+/** "per leg" · "each side" · "/side" · "per arm" — a third of her accessory work. */
+const UNILATERAL = /\b(?:per|each|\/)\s*(?:leg|side|arm|hand|foot)\b|\bunilateral\b/i
+
+export function isUnilateralLine(line: string): boolean {
+  return UNILATERAL.test(line)
 }
 
 /**
@@ -107,6 +117,9 @@ function unitOf(raw: string | undefined): 'reps' | 'seconds' | 'minutes' | 'dist
 }
 
 export function extractSets(line: string): ExtractedScheme {
+  // Read from the whole line: "per leg" trails the scheme, not the name.
+  const unilateral = isUnilateralLine(line) || undefined
+
   const cross = line.match(SCHEME)
   if (cross && cross.index !== undefined) {
     const sets = Number(cross[1])
@@ -136,10 +149,11 @@ export function extractSets(line: string): ExtractedScheme {
         name: cleanExerciseName(note.replace(cross[0], '')),
         sets,
         ...measured,
+        unilateral,
         note: cross[0],
       }
     }
-    return { name: cleanExerciseName(name), sets, ...measured, note: note || undefined }
+    return { name: cleanExerciseName(name), sets, ...measured, unilateral, note: note || undefined }
   }
 
   const sets = line.match(/(\d+)\s*(?:sets?|sett)\b/i)
@@ -147,11 +161,11 @@ export function extractSets(line: string): ExtractedScheme {
     const name = line.slice(0, sets.index).trim()
     const note = line.slice(sets.index).trim()
     if (name) {
-      return { name: cleanExerciseName(name), sets: Number(sets[1]), note: note || undefined }
+      return { name: cleanExerciseName(name), sets: Number(sets[1]), unilateral, note: note || undefined }
     }
   }
 
   // No scheme found. The whole line is the name, so it gets the most cleanup —
   // this is the path that produced "chest row   x6 @".
-  return { name: cleanExerciseName(line) }
+  return { name: cleanExerciseName(line), unilateral }
 }

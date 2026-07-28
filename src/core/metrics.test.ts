@@ -45,6 +45,12 @@ describe('volumeLoad', () => {
     expect(volumeLoad(makeSet({ weightKg: -20, reps: 8 }))).toBe(0)
   })
 
+  it('counts both limbs on unilateral work', () => {
+    // 2x10 per leg at 20 kg is two rows, each moving 20 kg for ten reps twice.
+    expect(volumeLoad(makeSet({ weightKg: 20, reps: 10, perSide: true }))).toBe(400)
+    expect(volumeLoad(makeSet({ weightKg: 20, reps: 10 }))).toBe(200)
+  })
+
   it('is zero when reps or weight are missing', () => {
     expect(volumeLoad(makeSet({ weightKg: 100 }))).toBe(0)
     expect(volumeLoad(makeSet({ reps: 5 }))).toBe(0)

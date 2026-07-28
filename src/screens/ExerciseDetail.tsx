@@ -185,6 +185,25 @@ export function ExerciseDetail({ id }: { id: string }) {
           </div>
 
           <div>
+            <div className="fieldlabel">One side at a time</div>
+            <div className="chips">
+              <button
+                className={`chip chip--sm${exercise.isUnilateral ? ' chip--on' : ''}`}
+                onClick={() =>
+                  void updateExercise(id, { isUnilateral: !exercise.isUnilateral || undefined })
+                }
+              >
+                {exercise.isUnilateral ? 'Per side' : 'Both sides'}
+              </button>
+            </div>
+            <p className="tiny faint" style={{ marginTop: 6 }}>
+              For split squats, Pallof presses and the like. Reps are then the count{' '}
+              <em>per limb</em>, volume counts both, and one row still counts as one hard set to
+              each side. Changing this only affects sets logged from now on.
+            </p>
+          </div>
+
+          <div>
             <div className="fieldlabel">Primary muscles</div>
             <div className="chips">
               {MUSCLES.map((m) => (

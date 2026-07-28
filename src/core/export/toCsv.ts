@@ -12,7 +12,7 @@ import { csvStyle, type CsvFlavor, type ExportBundle } from './types'
  * in an old file and a blank cell in a new one are indistinguishable, which was
  * the real complaint behind always-empty columns.
  */
-export const SCHEMA_VERSION = 2
+export const SCHEMA_VERSION = 3
 
 const COLUMNS = [
   'schema_version',
@@ -189,7 +189,9 @@ export function bundleToCsv(bundle: ExportBundle, flavor: CsvFlavor = 'internati
       set.plannedNote ?? '',
       performed ? num(set.weightKg) : '',
       performed ? num(set.reps, 0) : '',
-      '', // per_side — no unilateral flag yet, Phase 3
+      // Whether `reps` is per limb. Blank on bilateral work rather than
+      // 'false', so it reads as "not applicable" instead of "checked and no".
+      set.perSide ? 'true' : '',
       performed ? num(set.timeSec, 0) : '',
       performed ? num(set.distanceM) : '',
       performed && set.effortValue !== undefined ? (set.effortType ?? '') : '',

@@ -94,6 +94,23 @@ describe('extractSets', () => {
     expect(extractSets("Farmer's Walk 2x20m").repsMin).toBeUndefined()
   })
 
+  it('spots unilateral work however it is written', () => {
+    for (const line of [
+      'Bulgarian Split Squat 2x10 per leg',
+      'Pallof press 3x12 each side',
+      'Single-Leg Glute Bridge 3x10/side',
+      'Reverse Lunge 2x8 per side',
+    ]) {
+      expect(extractSets(line).unilateral, line).toBe(true)
+    }
+  })
+
+  it('does not call ordinary work unilateral', () => {
+    for (const line of ['Barbell Back Squat 5x5', 'Bench Press 3x8', 'Plank 3x30s']) {
+      expect(extractSets(line).unilateral, line).toBeUndefined()
+    }
+  })
+
   it('reads a written-out set count', () => {
     expect(extractSets('Lat Pulldown 4 sets of 12')).toMatchObject({
       name: 'Lat Pulldown',

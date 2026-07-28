@@ -16,7 +16,11 @@ export function volumeLoad(set: SetEntry): number {
   // in a drop set are real work. Only warm-ups are excluded.
   if (!movedLoad(set.setType)) return 0
   const w = Math.max(0, set.weightKg ?? 0)
-  return w * (set.reps ?? 0)
+  // On unilateral work `reps` is the count per limb, so the set moved that load
+  // twice. The set carries its own perSide flag rather than reading it off the
+  // exercise, so tonnage cannot change retroactively.
+  const sides = set.perSide ? 2 : 1
+  return w * (set.reps ?? 0) * sides
 }
 
 export function sessionVolume(sets: SetEntry[]): number {

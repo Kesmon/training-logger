@@ -87,7 +87,7 @@ export function parseRoutineText(text: string, fallbackName = 'Imported routine'
 
     if (!current) startDay('Day 1')
 
-    const { name, sets, repsMin, repsMax, durationSec, note } = extractSets(content)
+    const { name, sets, repsMin, repsMax, durationSec, unilateral, note } = extractSets(content)
     if (!name) continue
     current!.items.push({
       exercise: name,
@@ -95,6 +95,7 @@ export function parseRoutineText(text: string, fallbackName = 'Imported routine'
       plannedRepsMin: repsMin,
       plannedRepsMax: repsMax,
       plannedDurationSec: durationSec,
+      unilateral,
       note,
       recognised: sets !== undefined,
       rawSets: sets,

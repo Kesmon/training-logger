@@ -7,6 +7,7 @@ import {
   startSession,
   updateSet,
   seedSessionFromRoutineDay,
+  updateSession,
 } from '../../db/queries'
 import { db } from '../../db/schema'
 import { commitRoutine, resolveNames } from '../import/apply'
@@ -368,6 +369,88 @@ describe('CSV export', () => {
     const header = lines[0]!.split(',')
     const gaps = lines.slice(1).map((r) => r.split(',')[header.indexOf('logged_gap_sec')])
     expect(gaps).toEqual(['', ''])
+  })
+
+  it('shapes timed and unilateral exercises from the routine that describes them', async () => {
+    const parsed = parseRoutineText(
+      '# Block 2\n## Day A\n- Plank 3x30s\n- Bulgarian Split Squat 2x10 per leg',
+    )
+    const { routineId } = await commitRoutine(parsed, await resolveNames(parsed), new Map())
+
+    const made = await db.exercises.toArray()
+    const plank = made.find((e) => e.name === 'Plank')!
+    const split = made.find((e) => e.name === 'Bulgarian Split Squat')!
+
+    // A plank has nowhere to put a weight, and its duration needs a home.
+    expect(plank.fields).toEqual(['time', 'effort'])
+    expect(plank.equipment).toBe('bodyweight')
+    expect(split.isUnilateral).toBe(true)
+
+    const day = (await db.routineDays.where('routineId').equals(routineId).toArray())[0]!
+    const session = await startSession({ routineId, routineDayId: day.id, dayName: day.name })
+    await seedSessionFromRoutineDay(session.id, day.id)
+
+    const sets = await db.setEntries.where('sessionId').equals(session.id).toArray()
+    const bySetNumber = (a: { setNumber: number }, b: { setNumber: number }) =>
+      a.setNumber - b.setNumber
+    const splitSets = sets.filter((s) => s.exerciseId === split.id).sort(bySetNumber)
+    const plankSets = sets.filter((s) => s.exerciseId === plank.id).sort(bySetNumber)
+
+    // 2x10 per leg is two rows, not four.
+    expect(splitSets).toHaveLength(2)
+    expect(splitSets.every((s) => s.perSide === true)).toBe(true)
+    expect(plankSets).toHaveLength(3)
+    expect(plankSets.every((s) => s.plannedDurationSec === 30)).toBe(true)
+
+    // Perform one of each: the held duration and the per-limb reps.
+    await updateSet(plankSets[0]!.id, { timeSec: 22 })
+    await setSetStatus(plankSets[0]!.id, 'completed')
+    await updateSet(splitSets[0]!.id, { weightKg: 20, reps: 10 })
+    await setSetStatus(splitSets[0]!.id, 'completed')
+    await finishSession(session.id)
+
+    const lines = bundleToCsv(await buildBundle()).split('\r\n')
+    const header = lines[0]!.split(',')
+    const row = (name: string) =>
+      Object.fromEntries(
+        header.map((h, i) => [h, lines.slice(1).find((l) => l.includes(name))!.split(',')[i]]),
+      ) as Record<string, string>
+
+    const plankRow = row('Plank')
+    expect(plankRow.schema_version).toBe('3')
+    // Prescribed 30, held 22 — kept apart rather than collapsed.
+    expect(plankRow.planned_duration_sec).toBe('30')
+    expect(plankRow.duration_sec).toBe('22')
+
+    const splitRow = row('Bulgarian')
+    expect(splitRow.per_side).toBe('true')
+    expect(splitRow.reps).toBe('10')
+    // Both limbs did ten reps at 20 kg.
+    expect(splitRow.volume_kg).toBe('400')
+  })
+
+  it('carries session RPE, bodyweight and note once they are entered', async () => {
+    const squat = await createExercise({ name: 'Squat', equipment: 'barbell' })
+    const session = await startSession({ dayName: 'Day A' })
+    const set = await addSet(session.id, squat)
+    await updateSet(set.id, { weightKg: 100, reps: 5 })
+    await setSetStatus(set.id, 'completed')
+    await updateSession(session.id, {
+      sessionRpe: 8,
+      bodyweightKg: 62.5,
+      notes: 'Left knee felt off',
+    })
+    await finishSession(session.id)
+
+    const lines = bundleToCsv(await buildBundle()).split('\r\n')
+    const header = lines[0]!.split(',')
+    const body = lines[1]!.split(',')
+    const col = (n: string) => body[header.indexOf(n)]
+
+    // These three had no UI at all, so they could never be anything but blank.
+    expect(col('session_rpe')).toBe('8')
+    expect(col('bodyweight_kg')).toBe('62.5')
+    expect(col('session_note')).toBe('Left knee felt off')
   })
 
   it('quotes fields containing the delimiter', async () => {

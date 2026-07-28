@@ -221,6 +221,8 @@ export function parseRoutineCsv(text: string, fallbackName = 'Imported routine')
       plannedRepsMin: reps?.min,
       plannedRepsMax: reps?.max,
       plannedDurationSec: inline.durationSec ?? fromNoteScheme?.durationSec,
+      // "per leg" may sit in either the exercise cell or the note column.
+      unilateral: inline.unilateral || fromNoteScheme?.unilateral || undefined,
       note: noteCell || inline.note || undefined,
       // A dedicated sets column counts as recognised even with no inline scheme.
       recognised: resolved !== undefined && Number.isFinite(resolved),

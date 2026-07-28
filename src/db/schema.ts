@@ -57,6 +57,16 @@ export interface Exercise {
   /** Optional — only needed if you want per-muscle volume breakdowns. */
   primaryMuscles: string[]
   secondaryMuscles: string[]
+  /**
+   * One limb at a time — Bulgarian split squats, Pallof presses.
+   *
+   * The convention, agreed with the coach: `2x10 per leg` lays out **two** rows,
+   * each one set performed on both sides. `reps` is the count per limb, volume
+   * doubles, and the row counts as one hard set to each limb rather than two.
+   * The two readings differ by a factor of two, and nothing in the data would
+   * otherwise say which one you are looking at.
+   */
+  isUnilateral?: boolean
   fields: LogField[]
   defaultEffortType: EffortType | null
   isArchived: Flag
@@ -159,6 +169,12 @@ export interface SetEntry {
   timeSec?: number
   distanceM?: number
   bandColor?: string
+  /**
+   * Snapshotted from the exercise, so volume is computable from the set alone
+   * and a later change to the exercise cannot silently halve or double the
+   * tonnage of sessions already logged.
+   */
+  perSide?: boolean
 
   /**
    * What this set was prescribed to be, copied from the routine when the

@@ -91,8 +91,8 @@ export function SetRow({
               value={set.reps}
               onChange={(reps) => onChange({ reps })}
               min={0}
-              placeholder="reps"
-              ariaLabel="Reps"
+              placeholder={exercise.isUnilateral ? '/side' : 'reps'}
+              ariaLabel={exercise.isUnilateral ? 'Reps per side' : 'Reps'}
             />
           </div>
         )}

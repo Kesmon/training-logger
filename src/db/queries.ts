@@ -59,6 +59,14 @@ export async function findExerciseByName(name: string): Promise<Exercise | undef
   return db.exercises.where('aliases').equals(key).first()
 }
 
+/**
+ * Timed work logs a duration and an effort, not a weight and reps. Creating a
+ * `Plank 3x30s` with weight/reps fields left the held duration with nowhere to
+ * go, which is why `duration_sec` came back empty for an exercise whose entire
+ * prescription is a duration.
+ */
+export const TIMED_FIELDS: LogField[] = ['time', 'effort']
+
 export async function createExercise(input: {
   name: string
   equipment?: Equipment
@@ -66,6 +74,7 @@ export async function createExercise(input: {
   secondaryMuscles?: string[]
   fields?: LogField[]
   barWeightKg?: number
+  isUnilateral?: boolean
   notes?: string
 }): Promise<Exercise> {
   const equipment = input.equipment ?? 'barbell'
@@ -80,6 +89,7 @@ export async function createExercise(input: {
     barWeightKg: input.barWeightKg ?? defaultBarWeight(equipment),
     primaryMuscles: input.primaryMuscles ?? [],
     secondaryMuscles: input.secondaryMuscles ?? [],
+    isUnilateral: input.isUnilateral,
     fields: input.fields ?? defaultFieldsFor(equipment),
     defaultEffortType: settings.defaultEffortType,
     isArchived: 0,
@@ -238,6 +248,10 @@ export async function addSet(
       }
     : { effortType: exercise.defaultEffortType ?? undefined }
 
+  // Snapshotted so volume stays computable from the set alone, and so flipping
+  // the exercise later cannot silently double the tonnage of logged sessions.
+  const perSide = exercise.isUnilateral ? true : undefined
+
   const entry: SetEntry = {
     id: newId(),
     sessionId,
@@ -248,6 +262,7 @@ export async function addSet(
     setNumber: (previous?.setNumber ?? 0) + 1,
     setType: 'working',
     status: 'planned',
+    perSide,
     isComplete: 0,
     ...seed,
     ...overrides,
