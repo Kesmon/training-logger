@@ -93,6 +93,24 @@ export function fmtDuration(seconds: number): string {
   return `${s}s`
 }
 
+/**
+ * "just now" · "12 min ago" · "3 h ago" · "yesterday". Used for the last time a
+ * subscribed routine was checked, where the exact timestamp is noise and the
+ * rough age is the whole point.
+ */
+export function fmtAgo(iso: string | undefined, now: Date = new Date()): string {
+  if (!iso) return 'never'
+  const seconds = (now.getTime() - new Date(iso).getTime()) / 1000
+  if (!Number.isFinite(seconds) || seconds < 0) return 'just now'
+  if (seconds < 90) return 'just now'
+  const minutes = Math.round(seconds / 60)
+  if (minutes < 60) return `${minutes} min ago`
+  const hours = Math.round(minutes / 60)
+  if (hours < 24) return `${hours} h ago`
+  const days = Math.round(hours / 24)
+  return days === 1 ? 'yesterday' : `${days} days ago`
+}
+
 export function fmtClock(seconds: number): string {
   const s = Math.max(0, Math.round(seconds))
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`

@@ -22,6 +22,7 @@ from that loop having a human at each end and no server in the middle.
 ```
 screens/ components/     UI. React, hash routing, no derived logic of its own.
         │
+        ├──────────► sync/     Composes the three below: fetch → parse → write.
         ├──────────► core/     Pure functions. No React, no Dexie, no DOM.
         │                      metrics · format · import · export · library
         ├──────────► db/       Dexie schema and every mutation.
@@ -36,7 +37,13 @@ The dependency direction is one-way and worth keeping that way:
 | `core/` | other `core/`, types from `db/schema` | React, `db/queries`, anything in `platform/` |
 | `db/` | `core/ids`, `core/import/types` | React, screens |
 | `platform/` | nothing in the app | everything |
+| `sync/` | `core/`, `db/`, `platform/` | React, screens |
 | `screens/`, `components/` | all of the above | — |
+
+`sync/` exists because keeping a subscribed routine in step with the coach's
+sheet is the one job that needs all three lower layers at once — it fetches,
+parses, compares and writes. Putting it in `core/` would have dragged a network
+dependency into the layer whose entire value is being testable without one.
 
 Two deliberate exceptions exist and are the only ones:
 
@@ -72,6 +79,9 @@ directly bypasses all of it.
 | `export/filename.ts` | Deterministic, never-reused filenames. |
 | `library/duplicates.ts` | Finds library entries that are the same movement under different names. |
 | `library/canonicalNames.ts` | The spellings the programme uses, so a merge lands on the name the *next* import will also use. |
+| `import/hash.ts` | Content hash of source text — the cheap "has the sheet changed" gate. |
+| `import/classify.ts` | Which names of an incoming update may be applied without a human reading them. |
+| `import/diffRoutines.ts` | What actually changed between two revisions, in words. |
 
 ### `db/`
 
@@ -80,10 +90,22 @@ directly bypasses all of it.
 
 ### `platform/`
 
-`share.ts` only. `deliverFile` prefers the iOS share sheet and falls back to an
+`share.ts` — `deliverFile` prefers the iOS share sheet and falls back to an
 `<a download>`; `pickTextFile` opens the system picker and works around iOS
-firing no event when the picker is cancelled. This layer exists so a Capacitor
-wrapper could replace it without touching anything else.
+firing no event when the picker is cancelled.
+
+`fetchSource.ts` — the only network call in the app. https-only, short timeout,
+no retries, and it recognises an HTML body so a link to an unpublished sheet
+produces a sentence rather than a parser tantrum.
+
+This layer exists so a Capacitor wrapper could replace it without touching
+anything else.
+
+### `sync/`
+
+`updateRoutine.ts` only. `checkRoutineSource` fetches a subscribed routine and
+applies it if it clears three gates; `applyPendingSource` releases something that
+was withheld. See **Live routine updates** below.
 
 ## The data model
 
@@ -223,6 +245,52 @@ The export is offered immediately on finish, while the phone is still in hand,
 because anything that has to be remembered after training does not reliably
 happen.
 
+### Live routine updates
+
+A routine imported from a link keeps a `RoutineSource` row and is re-read when
+the app is opened or foregrounded.
+
+```
+App.tsx (after paint, unawaited)
+  → checkAllRoutineSources()               sync/updateRoutine
+      → fetchSource(url)                   platform — the only network call
+      → hashSource(text)      gate 1: did the bytes move at all
+      → parseRoutineCsv | parseRoutineText existing, unmodified
+      → resolveNames()                     existing, unmodified
+      → diffRoutines()        gate 2: did the *routine* move
+      → classifyUpdate()      gate 3: is every exercise one we already know
+      → commitRoutine(…, { supersedes })   existing, one new option
+```
+
+Only something that clears all three gates applies unattended. The gates are
+each guarding a different failure:
+
+1. **The hash** stops a poll costing a parse. Without it every launch does real
+   work to discover nothing happened.
+2. **The diff** stops version churn. A spreadsheet that gains a blank row changes
+   the bytes without changing the programme, and cutting a version for that fills
+   the history with revisions nobody made.
+3. **The classifier** is the safety property. A name only applies unattended when
+   it resolves to an exercise that already exists; anything new or unreadable is
+   held back and surfaced. This is what keeps auto-update from becoming a back
+   door around the import review screen, which exists because guessing once put
+   junk in the library permanently.
+
+Two further rules, both consequences of things decided elsewhere:
+
+- **An automatic update never applies while a session is in progress** — the same
+  reasoning as `registerType: 'prompt'`. It is stored as pending and applies on a
+  later check. Logged sets are snapshot-safe either way; what this protects is
+  the un-logged rows of the session in the user's hands. A *deliberate* manual
+  apply is allowed, because that is the user acting, not the app acting on them.
+- **`commitRoutine` supersedes by id here, not by name.** A subscription passes
+  the routine it currently feeds. Matching on name would start a second lineage
+  the moment the coach renamed the routine inside their sheet, leaving the
+  subscription pointing at a routine nothing updates again.
+
+Failure is never an error state: being offline is this app's normal condition.
+A failed check writes `lastError` for a quiet status line and changes nothing.
+
 ### Export
 
 ```
@@ -314,8 +382,13 @@ apple-touch-icon.
 
 Knowing what was decided against is as useful as knowing what exists.
 
-- **No backend, no sync, no accounts.** Two devices are reconciled by exporting a
-  JSON backup and restoring it in `merge` mode.
+- **No backend, no accounts, and no sync of training data.** Two devices are
+  reconciled by exporting a JSON backup and restoring it in `merge` mode. The
+  routine subscription is read-only and one-directional: the app fetches what the
+  coach publishes and never sends anything back. The CSV export remains the
+  return path.
+- **No push.** iOS Safari has no Periodic Background Sync, so "live" means "on
+  next open". Anything more would need a server.
 - **No rest timer.** Intervals are derived from the timestamps `setSetStatus`
   already writes, so the feature costs nothing and cannot be forgotten.
 - **No prescribed weights.** Routines carry structure and free text only. The

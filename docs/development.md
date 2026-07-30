@@ -67,6 +67,11 @@ are no mocks anywhere, which is a direct consequence of `core/` being pure.
 | `core/library/duplicates.test.ts` | Duplicate grouping, which entry survives, canonical-name matching, and `mergeExercises` moving history and repointing routine slots. |
 | `db/migration.test.ts` | Each upgrade against a real database built at the old version. |
 | `db/startFromRoutine.test.ts` | That starting from a routine lays out rows, snapshots identity and version, and carries the prescription. |
+| `core/import/hash.test.ts` | That transport noise (BOM, line endings, trailing blank lines) does not read as a change, but an edit inside a line does. |
+| `core/import/classify.test.ts` | That an unknown or unreadable exercise is held back, and that a near-miss suggestion is never auto-linked. |
+| `core/import/diffRoutines.test.ts` | Set counts, adds, removes, reorders — and that a set-count change does not also report the note that restates it. |
+| `platform/fetchSource.test.ts` | URL validation, the edit-link mistake, HTML bodies, and that every network failure arrives as a `SourceError`. |
+| `sync/updateRoutine.test.ts` | The three gates, the session guard, holding back a new lift while applying the rest, and error recovery. |
 
 ### Writing tests here
 
@@ -182,6 +187,27 @@ free, since the bundle is the tables as they are.
 3. Read with `useLiveQuery`, mutate through `db/queries.ts`.
 4. If it pulls in a heavy dependency, lazy-load it the way `Progress` does — the
    logging path should not carry code it never runs.
+
+### Touch the routine-subscription path
+
+The rule that must survive any change here: **an update only applies unattended
+when every exercise already exists.** `classifyUpdate` is the whole of that
+decision, and loosening it — auto-creating from a "clean-looking" line, acting on
+a near-miss suggestion — reintroduces the bug the import review screen exists to
+prevent, except now it happens without anyone watching.
+
+Two more things that look like bugs and are not:
+
+- `checkRoutineSource` **never throws.** It runs unattended on launch and returns
+  a `failed` outcome instead. Do not add a throw to it.
+- A deferred update deliberately leaves `lastHash` alone, so the next check still
+  sees it as new. Setting it there would mark the update as seen and it would
+  never apply.
+
+Testing it needs no network: pass `{ fetch }` in `SyncDeps` and `{ fetcher }` to
+`fetchSource`. In the browser, patching `window.fetch` for one origin exercises
+the real path end to end — the dev server is http, so a real https link cannot be
+used locally.
 
 ### Change the library-cleanup heuristics
 

@@ -14,6 +14,7 @@ import { SessionDetail } from './screens/SessionDetail'
 import { SessionScreen } from './screens/SessionScreen'
 import { SettingsScreen } from './screens/SettingsScreen'
 import { Today } from './screens/Today'
+import { checkAllRoutineSources } from './sync/updateRoutine'
 
 // Charts are the only thing pulling in Recharts, and they are never needed
 // mid-session. Splitting them keeps the logging path light.
@@ -73,6 +74,26 @@ export function App() {
   useEffect(() => {
     window.scrollTo(0, 0)
   }, [path])
+
+  // Subscribed routines are re-checked when the app is opened or comes back to
+  // the foreground. Deliberately after first paint and deliberately unawaited:
+  // this app's whole point is working with no signal, so a check must never be
+  // something the UI is waiting on. `checkAllRoutineSources` resolves rather
+  // than throwing on failure, and rate-limits itself.
+  useEffect(() => {
+    const check = () => {
+      void checkAllRoutineSources().catch(() => {})
+    }
+    const settle = setTimeout(check, 1500)
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') check()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      clearTimeout(settle)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [])
 
   return (
     <div className="app">

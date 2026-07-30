@@ -7,9 +7,12 @@ import {
   type Decision,
   type NameResolution,
 } from '../core/import/apply'
+import { hashSource } from '../core/import/hash'
 import { parseRoutineCsv } from '../core/import/parseRoutineCsv'
 import { parseRoutineText } from '../core/import/parseRoutineText'
 import type { ParsedRoutine } from '../core/import/types'
+import { createRoutineSource } from '../db/queries'
+import { fetchSource, normaliseSourceUrl, SourceError } from '../platform/fetchSource'
 import { pickTextFile } from '../platform/share'
 import { navigate } from '../router'
 
@@ -55,19 +58,49 @@ export function ImportScreen() {
   const [name, setName] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [url, setUrl] = useState('')
+  /**
+   * The link the previewed text came from, if any. Set only after a successful
+   * fetch, so a subscription is never created for text that was pasted or
+   * picked — the URL has to be the thing we can go back to.
+   */
+  const [linkedUrl, setLinkedUrl] = useState<string | undefined>()
+  const [fetching, setFetching] = useState(false)
+
+  async function loadLink() {
+    setFetching(true)
+    setError(null)
+    try {
+      const clean = normaliseSourceUrl(url)
+      const fetched = await fetchSource(clean)
+      setLinkedUrl(clean)
+      setFilename(undefined)
+      setRaw(fetched.text)
+      setFormat(fetched.format)
+      await parse(fetched.text, undefined, fetched.format)
+    } catch (e) {
+      setLinkedUrl(undefined)
+      setError(e instanceof SourceError ? e.message : 'Could not read that link.')
+    } finally {
+      setFetching(false)
+    }
+  }
 
   async function loadFile() {
     const file = await pickTextFile('.csv,.txt,.md,text/csv,text/plain,text/markdown')
     if (!file) return
+    setLinkedUrl(undefined)
     setFilename(file.name)
     setRaw(file.text)
     setError(null)
     await parse(file.text, file.name)
   }
 
-  async function parse(text: string, sourceName?: string) {
+  async function parse(text: string, sourceName?: string, override?: 'csv' | 'text') {
     setError(null)
-    const chosen = format === 'auto' ? detectFormat(text, sourceName) : format
+    // The override matters for a fetched link: `format` was only just set from
+    // the response, and this runs before React has applied it.
+    const chosen = override ?? (format === 'auto' ? detectFormat(text, sourceName) : format)
     const fallback = sourceName?.replace(/\.[^.]+$/, '') || 'Imported routine'
 
     try {
@@ -106,6 +139,18 @@ export function ImportScreen() {
         decisions,
         raw,
       )
+
+      // Subscribing is a side effect of importing *from a link* — the routine
+      // is now something we can go back and re-read, which pasted text is not.
+      if (linkedUrl) {
+        await createRoutineSource({
+          url: linkedUrl,
+          routineId,
+          format: format === 'auto' ? 'csv' : format,
+          lastHash: hashSource(raw),
+        })
+      }
+
       navigate(`/routine/${routineId}`, { replace: true })
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Import failed.')
@@ -411,13 +456,43 @@ export function ImportScreen() {
   return (
     <Screen title="Import routine" onBack>
       <div className="stack-lg">
+        <div>
+          <div className="section-title">From a link</div>
+          <input
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="https://docs.google.com/…/pub?output=csv"
+            inputMode="url"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+          />
+          <button
+            className="btn btn--primary btn--lg btn--block"
+            style={{ marginTop: 10 }}
+            disabled={!url.trim() || fetching}
+            onClick={() => void loadLink()}
+          >
+            {fetching ? 'Fetching…' : 'Fetch and preview'}
+          </button>
+          <p className="tiny faint" style={{ marginTop: 8 }}>
+            A routine imported from a link keeps checking it. When your coach edits the sheet, the
+            change arrives the next time you open the app — as long as every exercise is one you
+            already have. Anything new waits for you to approve it.
+          </p>
+          <p className="tiny faint">
+            In Google Sheets: <strong>File → Share → Publish to web</strong>, then choose
+            <strong> Comma-separated values (.csv)</strong>. The editing link will not work.
+          </p>
+        </div>
+
         <div className="stack">
-          <button className="btn btn--primary btn--lg btn--block" onClick={() => void loadFile()}>
+          <button className="btn btn--lg btn--block" onClick={() => void loadFile()}>
             Choose a file
           </button>
           <p className="tiny faint">
-            CSV from a spreadsheet, or Markdown/plain text. On iPhone this opens Files and iCloud
-            Drive.
+            A one-off import. CSV from a spreadsheet, or Markdown/plain text — on iPhone this opens
+            Files and iCloud Drive.
           </p>
         </div>
 
@@ -429,6 +504,9 @@ export function ImportScreen() {
             onChange={(e) => {
               setRaw(e.target.value)
               setFilename(undefined)
+              // Edited text is no longer what the link served, so it cannot be
+              // kept in step with one.
+              setLinkedUrl(undefined)
             }}
             placeholder={TEXT_EXAMPLE}
             autoCapitalize="none"

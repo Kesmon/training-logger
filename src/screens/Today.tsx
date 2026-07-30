@@ -4,6 +4,7 @@ import { IconChevron, IconPlus } from '../components/Icons'
 import { fmtDate, fmtDayName, fmtDuration, sessionDuration } from '../core/format'
 import {
   getActiveSession,
+  listRoutineSources,
   listSessions,
   startSession,
   startSessionFromRoutineDay,
@@ -29,6 +30,22 @@ export function Today() {
     [],
   )
 
+  // Subscribed routines with something the app would not apply on its own —
+  // a new exercise, or an update withheld while a session was in progress.
+  const waiting = useLiveQuery(
+    async () => {
+      const sources = (await listRoutineSources()).filter((s) => !!s.pendingRaw)
+      return Promise.all(
+        sources.map(async (s) => ({
+          source: s,
+          name: (await db.routines.get(s.routineId))?.name ?? 'Routine',
+        })),
+      )
+    },
+    [],
+    [],
+  )
+
   const completed = (recent ?? []).filter((s) => s.isComplete)
 
   async function begin() {
@@ -46,6 +63,28 @@ export function Today() {
   return (
     <Screen title="Today">
       <div className="stack-lg">
+        {waiting.map(({ source, name }) => (
+          <button
+            key={source.id}
+            className="card small row"
+            style={{
+              gap: 8,
+              textAlign: 'left',
+              width: '100%',
+              borderColor: 'color-mix(in srgb, var(--pr) 40%, var(--border))',
+              background: 'color-mix(in srgb, var(--pr) 8%, transparent)',
+            }}
+            onClick={() => navigate(`/routine/${source.routineId}`)}
+          >
+            <span style={{ flex: 1 }}>
+              {source.pendingNames?.length
+                ? `Your coach added ${source.pendingNames.length === 1 ? 'an exercise' : `${source.pendingNames.length} exercises`} to ${name}`
+                : `An update to ${name} is waiting`}
+            </span>
+            <IconChevron className="chevron" />
+          </button>
+        ))}
+
         <div>
           <div className="section-title">
             {today.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}

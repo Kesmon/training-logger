@@ -127,6 +127,47 @@ export interface RoutineItem {
   note?: string
 }
 
+/**
+ * A routine subscribed to a URL the coach publishes — today a Google Sheets
+ * "publish to web" CSV link.
+ *
+ * Kept in its own table rather than on `Routine` because a subscription
+ * outlives the versions it produces: every applied update writes a new
+ * `Routine` row and supersedes the old one, so anything stored there would be
+ * left behind on the first update.
+ */
+export interface RoutineSource {
+  id: string
+  /** The published URL. https only — enforced at the fetch boundary. */
+  url: string
+  /**
+   * The current routine in the lineage this feeds, repointed on every apply.
+   * `commitRoutine` supersedes by this id rather than by name, so the coach
+   * renaming the routine in the sheet stays one lineage.
+   */
+  routineId: string
+  format: 'csv' | 'text'
+  /** Hash of the last source text seen, applied or not. The cheap change gate. */
+  lastHash?: string
+  lastCheckedAt?: string
+  lastAppliedAt?: string
+  /**
+   * The last failure, for a quiet status line. Never surfaced as a blocking
+   * error: being offline is the normal state of this app, not a fault.
+   */
+  lastError?: string
+  /**
+   * Source text fetched but not fully applied — either because a session was in
+   * progress, or because it named exercises that must not be created unread.
+   */
+  pendingRaw?: string
+  pendingHash?: string
+  /** Names held back from the last apply, awaiting a decision. */
+  pendingNames?: string[]
+  /** Whether safe changes apply unattended. Off makes every update a prompt. */
+  autoApply: Flag
+}
+
 export interface Session {
   id: string
   /** Local calendar date, YYYY-MM-DD — never UTC, or a late session shifts a day. */
@@ -243,6 +284,7 @@ export class TrainingDb extends Dexie {
   sessions!: Table<Session, string>
   setEntries!: Table<SetEntry, string>
   settings!: Table<Settings, string>
+  routineSources!: Table<RoutineSource, string>
 
   constructor(name = 'training-logger') {
     super(name)
@@ -279,6 +321,21 @@ export class TrainingDb extends Dexie {
           routine.version = 1
         }),
     )
+
+    // v4 adds routineSources. Every store has to be restated, not just the new
+    // one: only version(1) declares `.stores()`, and a partial restatement here
+    // would drop the tables it omits. No upgrade function — a new empty table
+    // has nothing to backfill.
+    this.version(4).stores({
+      exercises: 'id, nameLower, *aliases, isArchived, equipment',
+      routines: 'id, name, createdAt',
+      routineDays: 'id, routineId, [routineId+order]',
+      routineItems: 'id, routineDayId, [routineDayId+order]',
+      sessions: 'id, date, startedAt, isComplete, routineDayId',
+      setEntries: 'id, sessionId, exerciseId, [sessionId+order], [exerciseId+date]',
+      settings: 'id',
+      routineSources: 'id, routineId, url',
+    })
   }
 }
 

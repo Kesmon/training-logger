@@ -105,3 +105,114 @@ describe('v1 to v2 migration', () => {
     upgraded.close()
   })
 })
+
+/**
+ * v4 adds the routineSources table. Because only version(1) declares `.stores()`,
+ * v4 has to restate every store — and a restatement that dropped one would take
+ * the table's data with it. That is what this exercises: real rows in every
+ * table, opened through the new schema, still there afterwards.
+ */
+describe('v3 to v4 migration', () => {
+  const openAtV3 = async (name: string) => {
+    const old = new Dexie(name)
+    old.version(1).stores(V1_STORES)
+    old.version(2)
+    old.version(3)
+    await old.open()
+    return old
+  }
+
+  it('adds routineSources without disturbing any existing table', async () => {
+    const name = `migration-v4-${Math.random().toString(36).slice(2)}`
+
+    const old = await openAtV3(name)
+    await old.table('exercises').add({
+      id: 'e1',
+      name: 'Barbell Back Squat',
+      nameLower: 'barbell back squat',
+      aliases: ['squat'],
+      equipment: 'barbell',
+      primaryMuscles: ['Quads'],
+      secondaryMuscles: [],
+      fields: ['weight', 'reps', 'effort'],
+      defaultEffortType: 'rpe',
+      isArchived: 0,
+      createdAt: '2026-07-01T00:00:00Z',
+    })
+    await old.table('routines').add({
+      id: 'r1',
+      name: 'Block 1',
+      version: 1,
+      source: 'text',
+      createdAt: '2026-07-01T00:00:00Z',
+    })
+    await old.table('routineDays').add({ id: 'd1', routineId: 'r1', order: 0, name: 'Day A' })
+    await old.table('routineItems').add({
+      id: 'i1',
+      routineDayId: 'd1',
+      order: 0,
+      exerciseId: 'e1',
+      plannedSets: 5,
+    })
+    await old.table('sessions').add({
+      id: 's1',
+      date: '2026-07-28',
+      startedAt: '2026-07-28T17:00:00Z',
+      isComplete: 1,
+    })
+    await old.table('setEntries').add({ ...v1Set('n1', 1), status: 'completed' })
+    await old.table('settings').add({ id: 'settings', unit: 'kg', sessionsSinceExport: 0 })
+    old.close()
+
+    const upgraded = new TrainingDb(name)
+
+    // The new table exists and is empty — nothing to backfill.
+    expect(await upgraded.routineSources.count()).toBe(0)
+
+    // Every pre-existing table survived the restatement.
+    expect((await upgraded.exercises.get('e1'))!.aliases).toEqual(['squat'])
+    expect((await upgraded.routines.get('r1'))!.version).toBe(1)
+    expect((await upgraded.routineDays.get('d1'))!.name).toBe('Day A')
+    expect((await upgraded.routineItems.get('i1'))!.plannedSets).toBe(5)
+    expect((await upgraded.sessions.get('s1'))!.isComplete).toBe(1)
+    expect((await upgraded.setEntries.get('n1'))!.weightKg).toBe(140)
+    expect((await upgraded.settings.get('settings'))!.unit).toBe('kg')
+
+    upgraded.close()
+  })
+
+  it('keeps the indexes the restatement had to repeat', async () => {
+    const name = `migration-v4-idx-${Math.random().toString(36).slice(2)}`
+    const old = await openAtV3(name)
+    await old.table('setEntries').add({ ...v1Set('n1', 1), status: 'completed' })
+    old.close()
+
+    const upgraded = new TrainingDb(name)
+
+    // A dropped index would not lose data, but every `where` in the app would
+    // start throwing — so the compound ones are worth an explicit check.
+    expect(await upgraded.setEntries.where('[exerciseId+date]').equals(['e1', '2026-07-28']).count()).toBe(1)
+    expect(await upgraded.setEntries.where('sessionId').equals('s1').count()).toBe(1)
+    expect(await upgraded.exercises.where('nameLower').equals('nothing').count()).toBe(0)
+
+    upgraded.close()
+  })
+
+  it('can store and find a subscription by the routine it feeds', async () => {
+    const name = `migration-v4-src-${Math.random().toString(36).slice(2)}`
+    const old = await openAtV3(name)
+    old.close()
+
+    const upgraded = new TrainingDb(name)
+    await upgraded.routineSources.add({
+      id: 'src1',
+      url: 'https://example.invalid/pub?output=csv',
+      routineId: 'r1',
+      format: 'csv',
+      autoApply: 1,
+    })
+
+    expect((await upgraded.routineSources.where('routineId').equals('r1').first())!.id).toBe('src1')
+    upgraded.close()
+  })
+})

@@ -311,6 +311,11 @@ export function SettingsScreen() {
               can clear a website’s storage after about a week of disuse, but apps added to the
               home screen are exempt from that. Export a backup now and then anyway.
             </p>
+            <p className="small muted">
+              A routine imported from a link is the one exception: the app re-reads that link when
+              you open it, to pick up your coach’s edits. It only ever reads — nothing about your
+              training goes back out, and everything else works with no signal at all.
+            </p>
           </div>
         </div>
       </Screen>

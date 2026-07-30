@@ -158,6 +158,18 @@ export async function commitRoutine(
   resolutions: NameResolution[],
   decisions: Map<string, Decision>,
   sourceRaw?: string,
+  opts?: {
+    /**
+     * Supersede this specific routine rather than whichever ones share the
+     * parsed name.
+     *
+     * A subscription passes the routine it currently feeds. Without it, a coach
+     * renaming the routine inside their sheet would start a second lineage
+     * instead of cutting a new version, and the subscription would be left
+     * pointing at a routine nothing updates again.
+     */
+    supersedes?: string
+  },
 ): Promise<CommitResult> {
   const byName = new Map<string, string>()
   let created = 0
@@ -234,17 +246,23 @@ export async function commitRoutine(
     'rw',
     [db.routines, db.routineDays, db.routineItems, db.exercises],
     async () => {
-      // Re-importing under the same name makes a new version rather than a second
-      // routine with a duplicated name. The previous one is kept — sessions
-      // logged against it must still resolve — but marked superseded so it drops
-      // out of the routine list.
-      const sameName = (await db.routines.where('name').equals(parsed.name).toArray()).filter(
-        (r) => !r.supersededBy,
-      )
-      if (sameName.length > 0) {
-        version = Math.max(...sameName.map((r) => r.version ?? 1)) + 1
+      // Re-importing makes a new version rather than a second routine with a
+      // duplicated name. The previous one is kept — sessions logged against it
+      // must still resolve — but marked superseded so it drops out of the
+      // routine list.
+      //
+      // Identified by id when the caller knows which lineage this continues,
+      // and by name otherwise, which is what a manual re-import has to go on.
+      const predecessors = opts?.supersedes
+        ? [await db.routines.get(opts.supersedes)].filter((r) => !!r)
+        : (await db.routines.where('name').equals(parsed.name).toArray()).filter(
+            (r) => !r.supersededBy,
+          )
+
+      if (predecessors.length > 0) {
+        version = Math.max(...predecessors.map((r) => r.version ?? 1)) + 1
         await Promise.all(
-          sameName.map((r) => db.routines.update(r.id, { supersededBy: routineId })),
+          predecessors.map((r) => db.routines.update(r.id, { supersededBy: routineId })),
         )
       }
 

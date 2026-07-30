@@ -1,10 +1,12 @@
 import { localDate, newId, nowIso } from '../core/ids'
+import type { RoutineSnapshot } from '../core/import/diffRoutines'
 import {
   DEFAULT_SETTINGS,
   db,
   type Equipment,
   type Exercise,
   type LogField,
+  type RoutineSource,
   type Session,
   type SetEntry,
   type SetStatus,
@@ -354,6 +356,86 @@ export async function removeExerciseFromSession(
     .filter((s) => s.exerciseId === exerciseId)
     .primaryKeys()
   await db.setEntries.bulkDelete(ids)
+}
+
+// ------------------------------------------------------------ routine sources
+
+export async function listRoutineSources(): Promise<RoutineSource[]> {
+  return db.routineSources.toArray()
+}
+
+export async function getRoutineSourceFor(routineId: string): Promise<RoutineSource | undefined> {
+  return db.routineSources.where('routineId').equals(routineId).first()
+}
+
+export async function createRoutineSource(input: {
+  url: string
+  routineId: string
+  format?: 'csv' | 'text'
+  lastHash?: string
+  autoApply?: boolean
+}): Promise<RoutineSource> {
+  const source: RoutineSource = {
+    id: newId(),
+    url: input.url.trim(),
+    routineId: input.routineId,
+    format: input.format ?? 'csv',
+    lastHash: input.lastHash,
+    lastCheckedAt: nowIso(),
+    lastAppliedAt: nowIso(),
+    autoApply: input.autoApply === false ? 0 : 1,
+  }
+  await db.routineSources.add(source)
+  return source
+}
+
+export async function updateRoutineSource(
+  id: string,
+  patch: Partial<RoutineSource>,
+): Promise<void> {
+  await db.routineSources.update(id, patch)
+}
+
+export async function deleteRoutineSource(id: string): Promise<void> {
+  await db.routineSources.delete(id)
+}
+
+/**
+ * The stored routine reduced to the shape `diffRoutines` compares.
+ *
+ * Uses the routine's **own** spelling of each exercise (`sourceName`) in
+ * preference to the library's, because the other side of the comparison is text
+ * straight out of the coach's sheet. Snapshotting the library name instead
+ * would make every aliased exercise read as one removed and one added on the
+ * first check.
+ */
+export async function snapshotOfRoutine(routineId: string): Promise<RoutineSnapshot> {
+  const days = (await db.routineDays.where('routineId').equals(routineId).toArray()).sort(
+    (a, b) => a.order - b.order,
+  )
+
+  return {
+    days: await Promise.all(
+      days.map(async (day) => {
+        const items = (await db.routineItems.where('routineDayId').equals(day.id).toArray()).sort(
+          (a, b) => a.order - b.order,
+        )
+        return {
+          name: day.name,
+          items: await Promise.all(
+            items.map(async (item) => ({
+              exercise: item.sourceName ?? (await db.exercises.get(item.exerciseId))?.name ?? '',
+              plannedSets: item.plannedSets,
+              plannedRepsMin: item.plannedRepsMin,
+              plannedRepsMax: item.plannedRepsMax,
+              plannedDurationSec: item.plannedDurationSec,
+              note: item.note,
+            })),
+          ),
+        }
+      }),
+    ),
+  }
 }
 
 /**
