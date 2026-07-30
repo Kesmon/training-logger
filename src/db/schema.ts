@@ -128,8 +128,8 @@ export interface RoutineItem {
 }
 
 export interface Session {
-  /** Local calendar date, YYYY-MM-DD. */
   id: string
+  /** Local calendar date, YYYY-MM-DD — never UTC, or a late session shifts a day. */
   date: string
   startedAt: string
   endedAt?: string

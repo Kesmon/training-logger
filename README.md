@@ -145,6 +145,16 @@ wraps Dexie. `src/screens/` and `src/components/` are the UI. `src/platform/`
 isolates the browser-specific parts (share sheet, file picker), so a Capacitor
 native wrapper could be added later without touching the rest.
 
+**Before changing anything**, three documents:
+
+| | |
+|---|---|
+| **[docs/architecture.md](docs/architecture.md)** | The map: layers, the data model and why it is denormalised, the import/logging/export flows, the set taxonomy, and what was deliberately left out. |
+| **[docs/csv-contract.md](docs/csv-contract.md)** | The export is a contract with someone outside this repo. Every column, what populates it, and how to add one safely. |
+| **[docs/development.md](docs/development.md)** | The test suite and what each file guards, the migration playbook, and step-by-step recipes for the changes that recur. |
+
+`CLAUDE.md` is the condensed version of the invariants, for coding agents.
+
 **Storage.** Everything lives in IndexedDB on the device. iOS clears storage for
 websites unused for about a week, but apps added to the home screen are exempt.
 Export a backup occasionally anyway — the app nudges you after five sessions.

@@ -106,6 +106,21 @@ and asserts the upgrade — worth extending rather than trusting a new migration
 Prescriptions cannot be backfilled: sessions logged before a routine link
 existed have no prescription to recover, and blank is the honest answer.
 
+## Where the longer explanations live
+
+This file is the short list of things not to break. When a rule above is not
+enough to act on, the reasoning and the surrounding detail are in:
+
+- `docs/architecture.md` — layers and their dependency rules, the data model,
+  the three data flows, the route and component inventory, deliberate non-goals.
+- `docs/csv-contract.md` — all 38 export columns, blank-versus-zero semantics,
+  and the checklist for adding one.
+- `docs/development.md` — what each test file guards, the migration playbook,
+  and recipes: add a capturable field, add a set type, change parser behaviour,
+  add a screen.
+
+Keep them current when the code moves under them.
+
 ## Documentation that cannot drift
 
 `docs/routine-format.md` is the user-facing guide to writing routines.
