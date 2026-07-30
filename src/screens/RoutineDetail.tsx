@@ -5,7 +5,7 @@ import { Screen } from '../components/Screen'
 import { Sheet } from '../components/Sheet'
 import { fmtDate } from '../core/format'
 import { deleteRoutine } from '../core/import/apply'
-import { seedSessionFromRoutineDay, startSession } from '../db/queries'
+import { startSessionFromRoutineDay } from '../db/queries'
 import { db } from '../db/schema'
 import { navigate } from '../router'
 
@@ -46,22 +46,9 @@ export function RoutineDetail({ id }: { id: string }) {
 
   const { routine, days } = data
 
-  async function start(dayId: string, dayName: string, dayNote?: string) {
-    const session = await startSession({
-      routineDayId: dayId,
-      routineId: id,
-      routineName: routine!.name,
-      // Snapshotted, so re-importing this routine mid-block cannot retroactively
-      // change which revision an already-logged session was performed under.
-      routineVersion: routine!.version,
-      dayName,
-      // Snapshotted so it survives the routine being superseded, and so it is
-      // on the phone in the gym rather than in a document she is not holding.
-      dayNote: dayNote,
-    })
-    // The routine supplies structure only — blank sets, no prescribed loads.
-    await seedSessionFromRoutineDay(session.id, dayId)
-    navigate(`/session/${session.id}`)
+  async function start(dayId: string) {
+    const session = await startSessionFromRoutineDay(dayId)
+    if (session) navigate(`/session/${session.id}`)
   }
 
   async function remove() {
@@ -96,7 +83,7 @@ export function RoutineDetail({ id }: { id: string }) {
                 <div style={{ flex: 1, fontWeight: 620 }}>{day.name}</div>
                 <button
                   className="btn btn--sm btn--primary"
-                  onClick={() => void start(day.id, day.name, day.notes)}
+                  onClick={() => void start(day.id)}
                 >
                   Start
                 </button>

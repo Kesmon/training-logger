@@ -2,7 +2,12 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { Empty, Screen } from '../components/Screen'
 import { IconChevron, IconPlus } from '../components/Icons'
 import { fmtDate, fmtDayName, fmtDuration, sessionDuration } from '../core/format'
-import { getActiveSession, listSessions, startSession } from '../db/queries'
+import {
+  getActiveSession,
+  listSessions,
+  startSession,
+  startSessionFromRoutineDay,
+} from '../db/queries'
 import { db } from '../db/schema'
 import { Link, navigate } from '../router'
 
@@ -32,16 +37,8 @@ export function Today() {
   }
 
   async function beginFromDay(dayId: string) {
-    const day = await db.routineDays.get(dayId)
-    if (!day) return
-    const routine = await db.routines.get(day.routineId)
-    const session = await startSession({
-      routineDayId: day.id,
-      routineId: day.routineId,
-      routineName: routine?.name,
-      dayName: day.name,
-    })
-    navigate(`/session/${session.id}`)
+    const session = await startSessionFromRoutineDay(dayId)
+    if (session) navigate(`/session/${session.id}`)
   }
 
   const today = new Date()

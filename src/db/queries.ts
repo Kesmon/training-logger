@@ -357,6 +357,33 @@ export async function removeExerciseFromSession(
 }
 
 /**
+ * Starts a session from a routine day and lays it out — identity snapshots, the
+ * day's note, and a blank row for every prescribed set.
+ *
+ * This exists as one function because the two screens that start sessions had
+ * each grown their own copy, and drifted: the Today screen never seeded any
+ * sets, and never snapshotted the routine version or the day note, because two
+ * later changes were only applied to the other copy. Anything that starts a
+ * session from a routine goes through here.
+ */
+export async function startSessionFromRoutineDay(dayId: string): Promise<Session | undefined> {
+  const day = await db.routineDays.get(dayId)
+  if (!day) return undefined
+  const routine = await db.routines.get(day.routineId)
+
+  const session = await startSession({
+    routineDayId: day.id,
+    routineId: day.routineId,
+    routineName: routine?.name,
+    routineVersion: routine?.version,
+    dayName: day.name,
+    dayNote: day.notes,
+  })
+  await seedSessionFromRoutineDay(session.id, day.id)
+  return session
+}
+
+/**
  * Lays out a session from a routine day: every exercise in order, each with its
  * planned number of blank sets ready to fill in. The routine supplies structure
  * only — no weights or reps are prescribed.
