@@ -250,6 +250,24 @@ happen.
 A routine imported from a link keeps a `RoutineSource` row and is re-read when
 the app is opened or foregrounded.
 
+**The transport is confirmed working.** A Google Sheets *publish to web* CSV link
+(`File → Share → Publish to web → Comma-separated values`) serves permissive CORS
+headers, so the PWA can fetch it directly with no server in the middle. This was
+the one assumption the feature rested on that no local test could settle, and it
+has been verified end to end on a deployed build against a real sheet. A sheet's
+ordinary `/edit` address is **not** fetchable and never will be — it serves an
+HTML application, which is why `normaliseSourceUrl` rejects it by name rather
+than letting the CSV parser produce nonsense.
+
+Anything reached over a link the coach cannot publish with CORS headers — iCloud
+Drive being the obvious one — stays a manual file import. Working around that
+would mean a proxy server, which the whole design exists to avoid.
+
+Two delays are inherent and neither is a bug. Google's publish-to-web republishes
+on its own schedule, so an edit is not visible the instant it is saved; and
+`checkRoutineSource` rate-limits a given source to one automatic check every five
+minutes. A manual **Check now** bypasses the second but not the first.
+
 ```
 App.tsx (after paint, unawaited)
   → checkAllRoutineSources()               sync/updateRoutine
