@@ -198,6 +198,56 @@ describe('v3 to v4 migration', () => {
     upgraded.close()
   })
 
+  it('releases the effort scale frozen onto existing exercises', async () => {
+    const name = `migration-v5-${Math.random().toString(36).slice(2)}`
+
+    const old = await openAtV3(name)
+    await old.table('exercises').add({
+      id: 'e1',
+      name: 'Barbell Back Squat',
+      nameLower: 'barbell back squat',
+      aliases: [],
+      equipment: 'barbell',
+      primaryMuscles: [],
+      secondaryMuscles: [],
+      fields: ['weight', 'reps', 'effort'],
+      // Whatever the global default happened to be on the day it was created.
+      defaultEffortType: 'rpe',
+      isArchived: 0,
+      createdAt: '2026-07-01T00:00:00Z',
+    })
+    // A set that was rated, and one that was only ever laid out.
+    await old.table('setEntries').add({
+      ...v1Set('n1', 1),
+      status: 'completed',
+      effortType: 'rpe',
+      effortValue: 8,
+    })
+    await old.table('setEntries').add({
+      ...v1Set('n2', 0),
+      status: 'planned',
+      effortType: 'rpe',
+    })
+    old.close()
+
+    const upgraded = new TrainingDb(name)
+
+    // The exercise now follows the global setting again.
+    expect((await upgraded.exercises.get('e1'))!.defaultEffortType).toBeNull()
+
+    // The unrated row is released, so an open session picks up the setting.
+    expect((await upgraded.setEntries.get('n2'))!.effortType).toBeUndefined()
+
+    // The rated one is untouched. Relabelling it would turn an RPE 8 into a
+    // RIR 8 — the opposite end of the scale — in both the app and the coach's
+    // CSV. It really was logged as RPE.
+    const logged = (await upgraded.setEntries.get('n1'))!
+    expect(logged.effortType).toBe('rpe')
+    expect(logged.effortValue).toBe(8)
+
+    upgraded.close()
+  })
+
   it('can store and find a subscription by the routine it feeds', async () => {
     const name = `migration-v4-src-${Math.random().toString(36).slice(2)}`
     const old = await openAtV3(name)

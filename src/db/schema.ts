@@ -336,6 +336,37 @@ export class TrainingDb extends Dexie {
       settings: 'id',
       routineSources: 'id, routineId, url',
     })
+
+    // v5 releases the effort scale that was frozen onto every exercise when it
+    // was created. No store changes, so no `.stores()` restatement — this is a
+    // backfill only.
+    //
+    // Safe to clear wholesale because no stored value was ever deliberate:
+    // there has never been a UI for a per-exercise effort scale, so each one
+    // only recorded whichever global default happened to be set on the day the
+    // exercise was created, and then shadowed the setting forever after.
+    this.version(5).upgrade(async (tx) => {
+      await tx
+        .table<Exercise>('exercises')
+        .toCollection()
+        .modify((exercise) => {
+          exercise.defaultEffortType = null
+        })
+
+      // Sets that were seeded with a scale but never rated. Clearing them lets
+      // a session that is open right now pick up the corrected setting.
+      //
+      // A set carrying an actual `effortValue` is left strictly alone: RPE 8
+      // and RIR 8 are opposite ends of the scale, so relabelling one without
+      // converting it would silently falsify logged history and the CSV the
+      // coach reads. Those really were logged as what they say.
+      await tx
+        .table<SetEntry>('setEntries')
+        .toCollection()
+        .modify((set) => {
+          if (set.effortValue === undefined) delete set.effortType
+        })
+    })
   }
 }
 

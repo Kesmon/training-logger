@@ -81,7 +81,6 @@ export async function createExercise(input: {
 }): Promise<Exercise> {
   const equipment = input.equipment ?? 'barbell'
   const name = input.name.trim()
-  const settings = await getSettings()
   const exercise: Exercise = {
     id: newId(),
     name,
@@ -93,7 +92,18 @@ export async function createExercise(input: {
     secondaryMuscles: input.secondaryMuscles ?? [],
     isUnilateral: input.isUnilateral,
     fields: input.fields ?? defaultFieldsFor(equipment),
-    defaultEffortType: settings.defaultEffortType,
+    /**
+     * Null means "follow the global setting", which is what the type has always
+     * allowed and what `SetRow` already resolves through.
+     *
+     * This used to copy in the current `settings.defaultEffortType`, which froze
+     * the effort scale at creation time: because the exercise sits *earlier*
+     * than the setting in SetRow's `??` chain, switching Settings to RIR later
+     * changed nothing for any lift already in the library. Nothing ever wrote a
+     * deliberate per-exercise value — there is no UI for one — so materialising
+     * the default here only ever recorded an accident of the creation date.
+     */
+    defaultEffortType: null,
     isArchived: 0,
     createdAt: nowIso(),
     notes: input.notes,
@@ -249,7 +259,12 @@ export async function addSet(
         plannedNote: previous.plannedNote,
         plannedExerciseName: previous.plannedExerciseName,
       }
-    : { effortType: exercise.defaultEffortType ?? undefined }
+    : // The first set of a block records no effort scale at all. `SetRow`
+      // resolves one live for display, and the type is written only when a
+      // value is actually chosen — so changing the global setting takes effect
+      // immediately rather than being shadowed by a value stamped on at
+      // creation. Later sets still inherit from the set before them, above.
+      {}
 
   // Snapshotted so volume stays computable from the set alone, and so flipping
   // the exercise later cannot silently double the tonnage of logged sessions.
